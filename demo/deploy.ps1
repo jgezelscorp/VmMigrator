@@ -7,6 +7,7 @@ param(
     [string[]]$Series,
     [string]$OperatorIp = '',
     [switch]$NoAutoShutdown,
+    [switch]$NoBastion,
     [switch]$WhatIf
 )
 $ErrorActionPreference = 'Stop'
@@ -43,3 +44,7 @@ try {
     else { az deployment group create -n vmmigrator-demo @deployArgs --query properties.outputs -o json }
 }
 finally { Remove-Item $vmFile -ErrorAction SilentlyContinue }
+
+if (-not $WhatIf -and -not $NoBastion) {
+    & "$here\bastion.ps1" -Subscription $Subscription -ResourceGroup $ResourceGroup
+}
