@@ -136,7 +136,8 @@ export type MigrationStep =
   | 'PostChecked'
   | 'Done';
 
-export type MigrationState = MigrationStep | 'RollingBack' | 'Restored' | 'Failed';
+/** Queued = created but not started; Done/Failed/Restored are terminal. */
+export type MigrationState = MigrationStep | 'Queued' | 'RollingBack' | 'Restored' | 'Failed';
 
 export interface PlannedAction {
   step: MigrationStep;
@@ -144,22 +145,61 @@ export interface PlannedAction {
   /** ARM call that would be made, for dry-run output */
   method?: 'GET' | 'PUT' | 'PATCH' | 'POST' | 'DELETE';
   url?: string;
+  body?: unknown;
 }
 
 export interface MigrationPlan {
   vmId: string;
+  vmName?: string;
+  availabilitySetId?: string;
   sourceSku: string;
   targetSku: string;
+  sourceDiskController?: DiskControllerType;
   targetDiskController?: DiskControllerType;
   dryRun: boolean;
   actions: PlannedAction[];
+  /** Pre-check outcome the plan is based on */
+  preCheck?: PreCheckResult;
+}
+
+export type PostCheckStatus = 'PASS' | 'WARN' | 'FAIL';
+
+export interface PostCheckItem {
+  checkId: string;
+  status: PostCheckStatus;
+  message: string;
+  remediation?: string;
 }
 
 export interface PostCheckResult {
   vmId: string;
-  overall: CheckStatus;
-  checks: CheckResult[];
+  overall: PostCheckStatus;
+  checks: PostCheckItem[];
   ranAt: string;
+  /** Set when overall is FAIL: advises rolling back */
+  recommendation?: string;
+}
+
+export interface SnapshotRef {
+  diskId: string;
+  diskName: string;
+  snapshotId: string;
+  snapshotName: string;
+  role: 'os' | 'data';
+  lun?: number;
+}
+
+export interface OriginalVmModel {
+  vmSize: string;
+  diskControllerType: DiskControllerType;
+  powerState: PowerState;
+}
+
+export interface JobEvent {
+  at: string;
+  level: 'info' | 'warn' | 'error';
+  step?: MigrationStep | 'Rollback' | 'Cleanup';
+  message: string;
 }
 
 export interface MigrationJob {
@@ -170,4 +210,29 @@ export interface MigrationJob {
   error?: string;
   startedAt: string;
   updatedAt: string;
+  vmName?: string;
+  /** Model captured before the first mutation; used by rollback */
+  original?: OriginalVmModel;
+  snapshots?: SnapshotRef[];
+  /** True once the engine began changing the VM (deallocation); failure then triggers rollback */
+  mutated?: boolean;
+  options?: MigrationJobOptions;
+  events?: JobEvent[];
+  postCheck?: PostCheckResult;
+  rollback?: { reason: string; at: string; trigger: 'automatic' | 'manual'; succeeded: boolean };
+  snapshotsCleaned?: boolean;
 }
+
+export interface MigrationJobOptions {
+  /** Delete snapshots after a successful migration (default: keep) */
+  cleanupSnapshots?: boolean;
+  /** Skip snapshots (not recommended) */
+  skipSnapshots?: boolean;
+  /** ISO timestamps; migration is refused outside the window */
+  maintenanceWindow?: { start: string; end: string };
+  /** Run the optional guest probe through run-command in post-checks */
+  guestProbe?: boolean;
+  /** Roll back automatically when the post-check overall result is FAIL (default: only recommend) */
+  autoRollbackOnPostCheckFail?: boolean;
+}
+

@@ -259,3 +259,30 @@ export async function discoverVms(
 
   return vms.sort((a, b) => a.subscriptionId.localeCompare(b.subscriptionId) || a.name.localeCompare(b.name));
 }
+
+/** Load and normalize a single VM by resource id (instance view, NICs, public IPs and managed disks included). */
+export async function getVm(arm: ArmClient, catalog: Catalog, vmId: string): Promise<VmInfo> {
+  const raw = await arm.get<Raw>(`${vmId}?api-version=${COMPUTE_API}&$expand=instanceView`);
+  const lookups: SubscriptionLookups = { nics: new Map(), publicIps: new Map(), disks: new Map() };
+  const fetchInto = async (target: Map<string, Raw>, id: string | undefined, api: string): Promise<Raw | undefined> => {
+    if (!id) return undefined;
+    try {
+      const item = await arm.get<Raw>(`${id}?api-version=${api}`);
+      target.set(id.toLowerCase(), item);
+      return item;
+    } catch {
+      return undefined;
+    }
+  };
+  const storage = raw.properties?.storageProfile ?? {};
+  await Promise.all([
+    ...(raw.properties?.networkProfile?.networkInterfaces ?? []).map(async (n: Raw) => {
+      const nic = await fetchInto(lookups.nics, n.id, NETWORK_API);
+      for (const c of nic?.properties?.ipConfigurations ?? []) {
+        await fetchInto(lookups.publicIps, c.properties?.publicIPAddress?.id, NETWORK_API);
+      }
+    }),
+    ...[storage.osDisk, ...(storage.dataDisks ?? [])].map((d: Raw) => fetchInto(lookups.disks, d?.managedDisk?.id, DISK_API)),
+  ]);
+  return normalizeVm(raw, lookups, catalog);
+}
