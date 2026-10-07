@@ -134,7 +134,7 @@ export const DEFAULT_SKUS = [
   rawSku({ name: 'Standard_DS2_v2', family: 'standardDSv2Family', vcpus: 2, memoryGb: 7, tempMb: 14336, controllers: 'SCSI' }),
   rawSku({ name: 'Standard_A2_v2', family: 'standardAv2Family', vcpus: 2, memoryGb: 4, tempMb: 20480, controllers: 'SCSI', premium: false }),
   rawSku({ name: 'Standard_F2s_v2', family: 'standardFSv2Family', vcpus: 2, memoryGb: 4, tempMb: 16384, controllers: 'SCSI' }),
-  rawSku({ name: 'Standard_D2as_v7', family: 'standardDasv7Family', vcpus: 2, memoryGb: 8, gens: 'V2', controllers: 'SCSI,NVMe' }),
+  rawSku({ name: 'Standard_D2as_v7', family: 'standardDasv7Family', vcpus: 2, memoryGb: 8, gens: 'V2', controllers: 'NVMe' }),
   rawSku({ name: 'Standard_D2ads_v7', family: 'standardDadsv7Family', vcpus: 2, memoryGb: 8, tempMb: 76800, gens: 'V2', controllers: 'NVMe', ephemeral: true }),
   rawSku({ name: 'Standard_D2as_v6', family: 'standardDasv6Family', vcpus: 2, memoryGb: 8, gens: 'V2', controllers: 'NVMe' }),
   rawSku({ name: 'Standard_D2ads_v6', family: 'standardDadsv6Family', vcpus: 2, memoryGb: 8, tempMb: 76800, gens: 'V2', controllers: 'NVMe', ephemeral: true }),
