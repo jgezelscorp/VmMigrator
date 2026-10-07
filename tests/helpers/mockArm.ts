@@ -18,22 +18,22 @@ export interface RecordedCall {
 
 const matches = (m: Matcher, path: string): boolean => (typeof m === 'string' ? path.includes(m) : m.test(path));
 
-/** Offline ARM double: first matching route wins, unmatched calls throw 404. */
+/** Offline ARM double: the most recently added matching route wins, unmatched calls throw 404. */
 export class MockArm implements ArmClient {
   readonly calls: RecordedCall[] = [];
   private readonly routes: Route[] = [];
 
   onGet(match: Matcher, value: unknown | Handler): this {
-    this.routes.push({ method: 'GET', match, handler: typeof value === 'function' ? (value as Handler) : () => value });
+    this.routes.unshift({ method: 'GET', match, handler: typeof value === 'function' ? (value as Handler) : () => value });
     return this;
   }
 
   onList(match: Matcher, items: unknown[] | Handler): this {
-    this.routes.push({ method: 'LIST', match, handler: typeof items === 'function' ? (items as Handler) : () => items });
+    this.routes.unshift({ method: 'LIST', match, handler: typeof items === 'function' ? (items as Handler) : () => items });
     return this;
   }
 
-  /** Added routes take priority so tests can override defaults */
+  
   onSend(method: ArmMethod, match: Matcher, handler: Handler = () => undefined): this {
     this.routes.unshift({ method, match, handler });
     return this;

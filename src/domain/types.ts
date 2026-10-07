@@ -106,6 +106,13 @@ export interface PreCheckResult {
   overall: CheckStatus;
   checks: CheckResult[];
   ranAt: string;
+  sourceSku?: string;
+  /** Controller the migration will set (NVMe) or keep (SCSI) on the target size */
+  targetDiskController?: DiskControllerType;
+  /** 'auto' when the engine picked the target from the ranked candidates */
+  targetSelection?: 'explicit' | 'auto';
+  /** Candidates evaluated during auto selection, in rank order */
+  candidatesEvaluated?: { sku: string; overall: CheckStatus }[];
 }
 
 export interface TargetCandidate {
