@@ -33,6 +33,8 @@ Scripts default to this subscription; override with `-Subscription`.
 
 Default region `swedencentral`, resource group `rg-vmmigrator-demo`. Every resource is tagged `purpose=vm-migrator-demo`.
 
+Access: `deploy.ps1` also runs `bastion.ps1`, creating an idempotent Azure Bastion (Basic, `AzureBastionSubnet` 10.50.2.0/26) so you can connect via portal > VM > Connect > Bastion (user `demoadmin`). Use `-NoBastion` to skip, or `.\demo\bastion.ps1 [-Sku Standard] [-Remove]` directly. Bastion adds roughly €0.15-0.20/hour (estimate) until cleanup.
+
 Cost/safety: StandardSSD_LRS disks, **no public IPs**, NSG denies Internet inbound (optional `-OperatorIp` adds SSH/RDP from that CIDR to the VNet), auto-shutdown at 19:00 UTC daily (`-NoAutoShutdown` to keep them running for the engine). Rough running cost for the full fleet is on the order of €0.7–0.9/hour (≈ €500–650/month if left on 24x7); deallocated cost is ~€0.5/day for disks. Estimates only; verify with the pricing calculator.
 
 ## Deploy

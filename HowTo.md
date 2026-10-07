@@ -90,7 +90,7 @@ The **target** v7 family also needs quota (for example Dasv7/Dsv7 for the D-seri
   `$env:VMMIG_ADMIN_PASSWORD` beforehand.
 - Use `-Series Dsv3,DS2_v2` for a subset, and `-Subscription <id>` / `-ResourceGroup <name>` to override the defaults
   (`rg-vmmigrator-demo`).
-- Add `-OperatorIp <your-cidr>` to allow SSH/RDP from your address to the VNet. VMs have **no public IPs**.
+- Add `-OperatorIp <your-cidr>` to allow SSH/RDP from your address to the VNet. VMs have **no public IPs**; connect via the **Azure Bastion** (Basic) that `deploy.ps1` creates: Azure portal > VM > Connect > Bastion, user `demoadmin`. Skip it with `-NoBastion`; create/remove it separately with `.\demo\bastion.ps1` / `.\demo\bastion.ps1 -Remove` (Bastion bills hourly, roughly €0.15-0.20/h; cleanup removes it).
 - Without `-NoAutoShutdown` the VMs shut down daily at 19:00 UTC. A stopped VM is fine for migration, but keep
   them running if you want the post-checks (agent heartbeat) to be meaningful.
 
