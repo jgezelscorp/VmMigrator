@@ -200,7 +200,15 @@ export class MigrationEngine {
           throw new MigrationRefusedError(`Pre-flight re-check blocks the migration: ${blockers.join('; ')}`, pre);
         }
         job.plan.preCheck = pre;
-        job.original ??= { vmSize: vm.vmSize, diskControllerType: vm.diskControllerType ?? 'SCSI', powerState: vm.powerState };
+        job.original ??= {
+          vmSize: vm.vmSize,
+          diskControllerType: vm.diskControllerType ?? 'SCSI',
+          powerState: vm.powerState,
+          dataDiskLuns: (vm.dataDisks ?? []).map((d) => d.lun ?? 0),
+          tags: vm.tags,
+          publicIps: (vm.nics ?? []).flatMap((n) => n.publicIps.map((p) => ({ id: p.id, ...(p.allocationMethod ? { allocationMethod: p.allocationMethod } : {}) }))),
+          backupProtected: pre.checks.some((c) => c.checkId === 'backup' && c.status === 'PASS'),
+        };
         this.event(job, 'info', step, `Pre-flight re-check ${pre.overall}`);
         return;
       }

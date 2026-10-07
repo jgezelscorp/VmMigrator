@@ -133,6 +133,12 @@ export class FakeArm implements ArmClient {
       return this.subscriptions.map((s) => ({ ...s, state: 'Enabled' })) as T[];
     }
     if (/\/providers\/Microsoft\.Compute\/virtualMachines$/i.test(p)) return clone(subVms) as T[];
+    if (/\/virtualMachines\/[^/]+\/extensions$/i.test(p)) {
+      const vm = this.vmFor(p);
+      return clone(
+        (vm?.resources ?? []).map((r: Raw) => ({ id: `${vm.id}/extensions/${r.name}`, name: r.name, properties: r.properties })),
+      ) as T[];
+    }
     if (/\/providers\/Microsoft\.Compute\/skus$/i.test(p)) return clone(this.skus) as T[];
     if (/\/usages$/i.test(p)) {
       const families = new Set<string>(this.skus.map((s) => s.family).filter(Boolean));
