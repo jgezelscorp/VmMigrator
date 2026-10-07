@@ -1,0 +1,19 @@
+{
+  "lnx-dsv3-g2-data": { "targetSku": "Standard_D2s_v6", "checks": [
+    { "checkId": "sku-availability", "status": "PASS", "message": "Standard_D2s_v6 is available in westeurope." },
+    { "checkId": "disk-controller", "status": "WARN", "message": "v6 uses NVMe disk controller; OS image must support NVMe.", "remediation": "Verify the Linux image has the nvme driver, or pick a v5 SKU." }
+  ] },
+  "win-dsv3-g2": { "targetSku": "Standard_D2s_v6", "checks": [
+    { "checkId": "sku-availability", "status": "PASS", "message": "Standard_D2s_v6 is available in westeurope." },
+    { "checkId": "quota", "status": "PASS", "message": "Sufficient DSv6 vCPU quota." }
+  ] },
+  "lnx-dsv3-g1": { "targetSku": "Standard_D2s_v5", "checks": [
+    { "checkId": "hyperv-generation", "status": "BLOCK", "message": "Gen1 VM cannot move to a Gen2-only SKU.", "remediation": "Convert the VM to Gen2 (Azure trusted launch upgrade) or choose a Gen1-capable SKU." }
+  ] },
+  "lnx-dsv2-g2-avs1": { "targetSku": "Standard_D2s_v5", "checks": [
+    { "checkId": "availability-set", "status": "WARN", "message": "VM is in an availability set; target SKU must be available in the same cluster.", "remediation": "Deallocate all VMs in the set and resize together." }
+  ] },
+  "lnx-fail-sim": { "targetSku": "Standard_E2s_v6", "checks": [
+    { "checkId": "sku-availability", "status": "PASS", "message": "Standard_E2s_v6 is available." }
+  ] }
+}
