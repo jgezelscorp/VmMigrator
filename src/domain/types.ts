@@ -193,6 +193,11 @@ export interface OriginalVmModel {
   vmSize: string;
   diskControllerType: DiskControllerType;
   powerState: PowerState;
+  /** Baseline used by post-checks to detect changes */
+  dataDiskLuns?: number[];
+  tags?: Record<string, string>;
+  publicIps?: { id: string; allocationMethod?: string }[];
+  backupProtected?: boolean;
 }
 
 export interface JobEvent {

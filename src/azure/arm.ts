@@ -26,6 +26,12 @@ export class ArmError extends Error {
   }
 }
 
+interface OperationDoc {
+  status?: string;
+  error?: { code?: string; message?: string };
+  properties?: { output?: unknown };
+}
+
 export interface HttpArmClientOptions {
   credential: CredentialProvider;
   baseUrl?: string;
@@ -77,15 +83,16 @@ export class HttpArmClient implements ArmClient {
     const asyncUrl = res.headers.get('azure-asyncoperation');
     const location = res.headers.get('location');
     if (res.status === 202 || (res.status === 201 && (asyncUrl || location)) || (asyncUrl && res.status < 300)) {
-      await this.waitForOperation(asyncUrl ?? location, res.headers.get('retry-after'));
+      const final = await this.waitForOperation(asyncUrl ?? location, res.headers.get('retry-after'));
       if (method === 'PUT' || method === 'PATCH') return this.get<T>(path);
-      return undefined as T;
+      // e.g. run-command returns its output in the finished operation document
+      return (final?.properties?.output ?? undefined) as T;
     }
     return (await parseBody(res)) as T;
   }
 
-  private async waitForOperation(url: string | null, retryAfter: string | null): Promise<void> {
-    if (!url) return;
+  private async waitForOperation(url: string | null, retryAfter: string | null): Promise<OperationDoc | undefined> {
+    if (!url) return undefined;
     const deadline = Date.now() + this.lroTimeoutMs;
     let wait = retryAfter ? Number(retryAfter) * 1000 : this.pollIntervalMs;
     for (;;) {
@@ -95,9 +102,9 @@ export class HttpArmClient implements ArmClient {
       const ra = res.headers.get('retry-after');
       wait = ra ? Number(ra) * 1000 : this.pollIntervalMs;
       if (res.status === 202) continue;
-      const body = (await parseBody(res)) as { status?: string; error?: { code?: string; message?: string } } | undefined;
+      const body = (await parseBody(res)) as OperationDoc | undefined;
       const status = body?.status;
-      if (!status || /^succeeded$/i.test(status)) return;
+      if (!status || /^succeeded$/i.test(status)) return body;
       if (/^(failed|canceled|cancelled)$/i.test(status)) {
         throw new ArmError(body?.error?.message ?? `Operation ${status}`, 500, body?.error?.code, body);
       }
