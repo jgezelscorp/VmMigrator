@@ -1,0 +1,27 @@
+import Fastify, { type FastifyInstance } from 'fastify';
+import { fileURLToPath } from 'node:url';
+
+export const HOST = '127.0.0.1';
+export const DEFAULT_PORT = 3000;
+
+export function buildServer(): FastifyInstance {
+  const app = Fastify({ logger: false });
+
+  app.get('/api/health', async () => ({ status: 'ok' }));
+
+  return app;
+}
+
+export async function start(port = Number(process.env['PORT'] ?? DEFAULT_PORT)): Promise<FastifyInstance> {
+  const app = buildServer();
+  await app.listen({ host: HOST, port });
+  console.log(`VmMigrator listening on http://${HOST}:${port}`);
+  return app;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  start().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
