@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { ArmClient } from '../azure/arm.js';
-import { COMPUTE_API } from '../discovery/discovery.js';
+import { ArmError, type ArmClient } from '../azure/arm.js';
+import { COMPUTE_API, parseResourceId } from '../discovery/discovery.js';
 import type {
   DiskControllerType,
   JobEvent,
@@ -10,10 +10,25 @@ import type {
   MigrationStep,
   PostCheckResult,
   PreCheckResult,
+  RebuildState,
   VmInfo,
 } from '../domain/types.js';
 import { buildPlan, DISK_API, snapshotBody, snapshotPath, snapshotTargets, updateBody } from './plan.js';
+import {
+  detachBody,
+  diskPath,
+  extensionBodies,
+  newDiskBody,
+  PAGEFILE_SCRIPT,
+  rebuildDiskName,
+  recreateVmBody,
+  trustedLaunchBody,
+  type AttachedDisk,
+} from './rebuild.js';
 import type { JobStore } from './store.js';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type Raw = any;
 
 export class MigrationRefusedError extends Error {
   constructor(
@@ -44,7 +59,7 @@ export interface MigrationDeps {
   store: JobStore;
   getVm(vmId: string): Promise<VmInfo>;
   /** Pre-check for a VM; with targetSku set the target is explicit */
-  preCheck(vm: VmInfo, targetSku?: string): Promise<PreCheckResult>;
+  preCheck(vm: VmInfo, targetSku?: string, opts?: { strategy?: 'inPlace' | 'rebuild' }): Promise<PreCheckResult>;
   /** Post-check engine hook (run after the VM is started) */
   postCheck?(job: MigrationJob, vm: VmInfo): Promise<PostCheckResult>;
   sleep?(ms: number): Promise<void>;
@@ -63,6 +78,9 @@ export interface CreateJobInput {
 }
 
 const STEP_ORDER: MigrationStep[] = ['Validated', 'SnapshotTaken', 'Deallocated', 'Updated', 'Started', 'PostChecked', 'Done'];
+const REBUILD_STEP_ORDER: MigrationStep[] = ['Validated', 'Prepared', 'SnapshotTaken', 'Deallocated', 'Rebuilt', 'Started', 'PostChecked', 'Done'];
+const stepsOf = (job: MigrationJob): MigrationStep[] => (job.plan.strategy === 'rebuild' ? REBUILD_STEP_ORDER : STEP_ORDER);
+const isNotFound = (e: unknown): boolean => e instanceof ArmError && e.status === 404;
 const TERMINAL: MigrationState[] = ['Done', 'Failed', 'Restored'];
 export const isTerminal = (s: MigrationState): boolean => TERMINAL.includes(s);
 
@@ -103,15 +121,23 @@ export class MigrationEngine {
    */
   async plan(input: CreateJobInput): Promise<MigrationJob> {
     const vm = await this.deps.getVm(input.vmId);
-    const pre = await this.deps.preCheck(vm, input.targetSku);
+    const wantsRebuild = input.options?.strategy === 'rebuild';
+    const pre = await this.deps.preCheck(vm, input.targetSku, wantsRebuild ? { strategy: 'rebuild' } : undefined);
     if (pre.overall === 'BLOCK' || !pre.targetSku) {
       const blockers = pre.checks.filter((c) => c.status === 'BLOCK').map((c) => `${c.checkId}: ${c.message}`);
-      throw new MigrationRefusedError(`Pre-checks block the migration of ${vm.name}: ${blockers.join('; ') || 'no viable target'}`, pre);
+      const hint = pre.rebuildAvailable && !wantsRebuild ? ' The opt-in "rebuild" strategy can handle this (options.strategy=rebuild, options.confirmRebuild=true).' : '';
+      throw new MigrationRefusedError(`Pre-checks block the migration of ${vm.name}: ${blockers.join('; ') || 'no viable target'}${hint}`, pre);
     }
     const options = input.options ?? {};
     const dryRun = input.dryRun === true;
     if (!dryRun && !withinWindow(options, this.now())) {
       throw new MigrationRefusedError(`Current time is outside the maintenance window for ${vm.name}`);
+    }
+    if (wantsRebuild && pre.rebuildKind && !dryRun) {
+      if (options.skipSnapshots) throw new MigrationRefusedError(`The rebuild strategy needs snapshots; skipSnapshots cannot be combined with it (${vm.name})`);
+      if (options.confirmRebuild !== true) {
+        throw new MigrationRefusedError(`The rebuild strategy deletes and recreates ${vm.name} (downtime); set options.confirmRebuild=true to confirm`);
+      }
     }
     const id = (this.deps.newId ?? randomUUID)();
     const at = this.now().toISOString();
@@ -126,7 +152,10 @@ export class MigrationEngine {
       options,
       events: [],
     };
-    this.event(job, 'info', dryRun ? 'Validated' : undefined, dryRun ? 'Dry run: no changes were made' : `Queued ${vm.vmSize} -> ${pre.targetSku}`);
+    this.event(job, 'info', dryRun ? 'Validated' : undefined, dryRun ? 'Dry run: no changes were made' : `Queued ${vm.vmSize} -> ${pre.targetSku}${job.plan.strategy === 'rebuild' ? ` (rebuild: ${job.plan.rebuildKind})` : ''}`);
+    if (wantsRebuild && job.plan.strategy !== 'rebuild') {
+      this.event(job, 'info', undefined, 'Rebuild was requested but an in-place resize is possible; the in-place strategy is used');
+    }
     return job;
   }
 
@@ -147,7 +176,7 @@ export class MigrationEngine {
     if (job.state === 'RollingBack') return this.rollbackJob(job, job.error ?? 'resumed rollback', 'automatic');
 
     try {
-      for (const step of STEP_ORDER) {
+      for (const step of stepsOf(job)) {
         if (job.completedSteps.includes(step)) continue;
         await this.execute(job, step);
         job.completedSteps.push(step);
@@ -174,6 +203,7 @@ export class MigrationEngine {
     const job = this.get(id);
     if (!isTerminal(job.state)) throw new InvalidJobStateError(`Job is ${job.state}; clean up snapshots after it finished`);
     await this.deleteSnapshots(job);
+    await this.deleteOriginalDisks(job);
     this.save(job);
     return job;
   }
@@ -194,7 +224,7 @@ export class MigrationEngine {
     switch (step) {
       case 'Validated': {
         const vm = await this.deps.getVm(vmId);
-        const pre = await this.deps.preCheck(vm, plan.targetSku);
+        const pre = await this.deps.preCheck(vm, plan.targetSku, plan.strategy === 'rebuild' ? { strategy: 'rebuild' } : undefined);
         if (pre.overall === 'BLOCK') {
           const blockers = pre.checks.filter((c) => c.status === 'BLOCK').map((c) => `${c.checkId}: ${c.message}`);
           throw new MigrationRefusedError(`Pre-flight re-check blocks the migration: ${blockers.join('; ')}`, pre);
@@ -209,7 +239,31 @@ export class MigrationEngine {
           publicIps: (vm.nics ?? []).flatMap((n) => n.publicIps.map((p) => ({ id: p.id, ...(p.allocationMethod ? { allocationMethod: p.allocationMethod } : {}) }))),
           backupProtected: pre.checks.some((c) => c.checkId === 'backup' && c.status === 'PASS'),
         };
+        if (plan.strategy === 'rebuild' && plan.rebuildKind && !job.original.rebuild) job.original.rebuild = await this.captureRebuildState(vm, plan.rebuildKind);
         this.event(job, 'info', step, `Pre-flight re-check ${pre.overall}`);
+        return;
+      }
+
+      case 'Prepared': {
+        if (job.plan.rebuildKind !== 'recreate' || job.options?.movePagefile === false) return;
+        const vm = await this.deps.getVm(vmId);
+        if (vm.osType !== 'Windows') return;
+        if (vm.powerState !== 'running') {
+          this.event(job, 'info', step, 'VM is not running; pagefile move skipped (Windows recreates the pagefile on C: when D: is missing)');
+          return;
+        }
+        try {
+          const res = await arm.send<{ value?: { message?: string }[] } | undefined>('POST', `${vmId}/runCommand?api-version=${COMPUTE_API}`, {
+            commandId: 'RunPowerShellScript',
+            script: PAGEFILE_SCRIPT,
+          });
+          const text = (res?.value ?? []).map((v) => v.message ?? '').join('\n');
+          const after = /VMM_PAGEFILE_AFTER=(.*)/.exec(text)?.[1]?.trim() ?? '';
+          if (job.original?.rebuild) job.original.rebuild.pagefile = after;
+          this.event(job, after && !/^[dDeEfF]:/.test(after) ? 'info' : 'warn', step, `Pagefile setting after move: ${after || 'unknown'}`);
+        } catch (e) {
+          this.event(job, 'warn', step, `Could not move the pagefile (${errText(e)}); continuing, Windows recreates it on C: when D: is missing`);
+        }
         return;
       }
 
@@ -268,6 +322,14 @@ export class MigrationEngine {
         return;
       }
 
+      case 'Rebuilt': {
+        const rb = job.original?.rebuild;
+        if (!rb) throw new Error('Rebuild state was not captured');
+        if (rb.kind === 'gen1-upgrade') await this.gen1Upgrade(job, rb);
+        else await this.recreate(job, rb);
+        return;
+      }
+
       case 'Started': {
         const wasRunning = job.original?.powerState === 'running' || job.original?.powerState === 'starting';
         if (!wasRunning) {
@@ -298,10 +360,146 @@ export class MigrationEngine {
       }
 
       case 'Done': {
-        if (job.options?.cleanupSnapshots && job.postCheck?.overall !== 'FAIL') await this.deleteSnapshots(job);
+        if (job.options?.cleanupSnapshots && job.postCheck?.overall !== 'FAIL') {
+          await this.deleteSnapshots(job);
+          await this.deleteOriginalDisks(job);
+        }
         return;
       }
     }
+  }
+
+  private async captureRebuildState(vm: VmInfo, kind: RebuildState['kind']): Promise<RebuildState> {
+    const { arm } = this.deps;
+    const definition = await arm.get<Raw>(`${vm.id}?api-version=${COMPUTE_API}`);
+    let extensions: Raw[];
+    try {
+      extensions = await arm.list<Raw>(`${vm.id}/extensions?api-version=${COMPUTE_API}`);
+    } catch {
+      extensions = definition.resources ?? [];
+    }
+    const disks: RebuildState['disks'] = [];
+    if (vm.osDisk?.id) disks.push({ role: 'os', originalDiskId: vm.osDisk.id, originalDiskName: vm.osDisk.name });
+    for (const d of vm.dataDisks ?? []) {
+      if (d.id) disks.push({ role: 'data', lun: d.lun ?? 0, originalDiskId: d.id, originalDiskName: d.name });
+    }
+    return { kind, definition, extensions, disks };
+  }
+
+  /** Gen1 -> Trusted launch (Gen2) upgrade on the deallocated VM, then the size/controller update. */
+  private async gen1Upgrade(job: MigrationJob, rb: RebuildState): Promise<void> {
+    const { arm } = this.deps;
+    const plan = job.plan;
+    const vmId = plan.vmId;
+    let vm = await this.deps.getVm(vmId);
+    if (vm.securityType !== 'TrustedLaunch') {
+      rb.upgradeStarted = true;
+      this.save(job);
+      await arm.send('PATCH', `${vmId}?api-version=${COMPUTE_API}`, trustedLaunchBody);
+      this.event(job, 'info', 'Rebuilt', 'VM upgraded to Trusted launch (Generation 2)');
+      vm = await this.deps.getVm(vmId);
+    }
+    const target = plan.targetDiskController ?? vm.diskControllerType ?? 'SCSI';
+    if (vm.vmSize.toLowerCase() !== plan.targetSku.toLowerCase() || (vm.diskControllerType ?? 'SCSI') !== target) {
+      await arm.send('PATCH', `${vmId}?api-version=${COMPUTE_API}`, updateBody(plan.targetSku, target, vm.diskControllerType));
+      this.event(job, 'info', 'Rebuilt', `VM updated to ${plan.targetSku} (${target})`);
+    }
+  }
+
+  /** Windows temp-disk path: new disks from the snapshots, delete the VM definition, create the VM again. */
+  private async recreate(job: MigrationJob, rb: RebuildState): Promise<void> {
+    const { arm } = this.deps;
+    const plan = job.plan;
+    const vmId = plan.vmId;
+    const def: Raw = rb.definition;
+    const ids = parseResourceId(vmId);
+    const location: string = def.location;
+
+    for (const d of rb.disks) {
+      if (d.newDiskId) continue;
+      const snap = (job.snapshots ?? []).find((s) => s.diskId.toLowerCase() === d.originalDiskId.toLowerCase());
+      if (!snap) throw new Error(`No snapshot of ${d.originalDiskName}; the rebuild needs one for every disk`);
+      d.snapshotId = snap.snapshotId;
+      const name = rebuildDiskName(d.originalDiskName, job.id);
+      const path = diskPath(ids.subscriptionId, ids.resourceGroup, name);
+      const original = await this.tryGet(d.originalDiskId, DISK_API);
+      await arm.send('PUT', `${path}?api-version=${DISK_API}`, newDiskBody({ location, ...(def.zones ? { zones: def.zones } : {}), snapshotId: snap.snapshotId, original, osType: def.properties?.storageProfile?.osDisk?.osType, tags: { sourceVm: ids.name, jobId: job.id } }));
+      d.newDiskId = path;
+      d.newDiskName = name;
+      this.save(job);
+      this.event(job, 'info', 'Rebuilt', `Disk ${name} created from snapshot ${snap.snapshotName}`);
+    }
+
+    if (!rb.vmDeleted) {
+      await this.detachIfNeeded(vmId);
+      await arm.send('DELETE', `${vmId}?api-version=${COMPUTE_API}`);
+      rb.vmDeleted = true;
+      this.save(job);
+      this.event(job, 'info', 'Rebuilt', `VM definition ${ids.name} deleted (disks and NICs kept)`);
+    }
+
+    if (!rb.vmCreated) {
+      const target = plan.targetDiskController ?? 'SCSI';
+      await this.createVm(job, rb, plan.targetSku, target, rb.disks.map((d) => ({ role: d.role, ...(d.lun !== undefined ? { lun: d.lun } : {}), id: d.newDiskId ?? '', name: d.newDiskName ?? '' })));
+      rb.vmCreated = true;
+      this.save(job);
+      this.event(job, 'info', 'Rebuilt', `VM ${ids.name} created as ${plan.targetSku} (${target})`);
+    }
+  }
+
+  /** PUTs the VM from the captured definition, restores extensions and leaves it in its original power state. */
+  private async createVm(
+    job: MigrationJob,
+    rb: RebuildState,
+    vmSize: string,
+    controller: DiskControllerType,
+    disks: { role: 'os' | 'data'; lun?: number; id: string; name: string }[],
+  ): Promise<void> {
+    const { arm } = this.deps;
+    const vmId = job.plan.vmId;
+    const def: Raw = rb.definition;
+    const os = disks.find((d) => d.role === 'os');
+    if (!os) throw new Error('No OS disk to attach');
+    const data = new Map<number, AttachedDisk>(disks.filter((d) => d.role === 'data').map((d) => [d.lun ?? 0, { id: d.id, name: d.name }]));
+    await arm.send('PUT', `${vmId}?api-version=${COMPUTE_API}`, recreateVmBody({ definition: def, vmSize, controller, os: { id: os.id, name: os.name }, data }));
+    for (const ext of extensionBodies(rb.extensions as Raw[], def.location)) {
+      try {
+        await arm.send('PUT', `${vmId}/extensions/${ext.name}?api-version=${COMPUTE_API}`, ext.body);
+        this.event(job, 'info', undefined, `Extension ${ext.name} restored`);
+      } catch (e) {
+        this.event(job, 'warn', undefined, `Extension ${ext.name} could not be restored (${errText(e)}); reinstall it manually`);
+      }
+    }
+    const wasRunning = job.original?.powerState === 'running' || job.original?.powerState === 'starting';
+    if (!wasRunning) {
+      await arm.send('POST', `${vmId}/deallocate?api-version=${COMPUTE_API}`);
+      await this.waitFor(vmId, 'deallocated');
+    }
+  }
+
+  private async tryGet(id: string, api: string): Promise<Raw | undefined> {
+    try {
+      return await this.deps.arm.get<Raw>(`${id}?api-version=${api}`);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Disks/NICs with deleteOption=Delete would be removed together with the VM definition; flip them first. */
+  private async detachIfNeeded(vmId: string): Promise<void> {
+    const live = await this.deps.arm.get<Raw>(`${vmId}?api-version=${COMPUTE_API}`);
+    const body = detachBody(live);
+    if (body) await this.deps.arm.send('PATCH', `${vmId}?api-version=${COMPUTE_API}`, body);
+  }
+
+  private async deleteOriginalDisks(job: MigrationJob): Promise<void> {
+    const rb = job.original?.rebuild;
+    if (!rb || rb.kind !== 'recreate' || rb.originalDisksDeleted || ['Restored', 'Failed', 'RollingBack'].includes(job.state)) return;
+    for (const d of rb.disks) {
+      await this.deps.arm.send('DELETE', `${d.originalDiskId}?api-version=${DISK_API}`);
+      this.event(job, 'info', 'Cleanup', `Deleted original disk ${d.originalDiskName}`);
+    }
+    rb.originalDisksDeleted = true;
   }
 
   private async fail(job: MigrationJob, e: unknown): Promise<MigrationJob> {
@@ -322,6 +520,14 @@ export class MigrationEngine {
     this.save(job);
     try {
       if (!orig) throw new Error('original VM model was not captured');
+      if (orig.rebuild && (orig.rebuild.vmDeleted || orig.rebuild.upgradeStarted)) {
+        await this.rollbackRebuild(job, orig.rebuild);
+        job.state = 'Restored';
+        job.rollback = { reason, at: this.now().toISOString(), trigger, succeeded: true };
+        this.event(job, 'info', 'Rollback', 'Rollback complete');
+        this.save(job);
+        return job;
+      }
       const vm = await this.deps.getVm(vmId);
       const ctl: DiskControllerType = vm.diskControllerType ?? 'SCSI';
       if (vm.vmSize.toLowerCase() !== orig.vmSize.toLowerCase() || ctl !== orig.diskControllerType) {
@@ -349,6 +555,69 @@ export class MigrationEngine {
     }
     this.save(job);
     return job;
+  }
+
+  /**
+   * Recreates the original VM from the captured definition: on the original disks (recreate) or on fresh disks made
+   * from the snapshots (Gen1 upgrade, where the original disks were converted to Gen2).
+   */
+  private async rollbackRebuild(job: MigrationJob, rb: RebuildState): Promise<void> {
+    const { arm } = this.deps;
+    const orig = job.original;
+    if (!orig) throw new Error('original VM model was not captured');
+    const vmId = job.plan.vmId;
+    const ids = parseResourceId(vmId);
+    const def: Raw = rb.definition;
+    const fromSnapshots = rb.kind === 'gen1-upgrade';
+
+    let exists = true;
+    try {
+      await this.deps.arm.get(`${vmId}?api-version=${COMPUTE_API}`);
+    } catch (e) {
+      if (!isNotFound(e)) throw e;
+      exists = false;
+    }
+    if (exists) {
+      await this.detachIfNeeded(vmId);
+      await arm.send('DELETE', `${vmId}?api-version=${COMPUTE_API}`);
+      this.event(job, 'info', 'Rollback', `Deleted the ${rb.kind === 'recreate' ? 'rebuilt' : 'upgraded'} VM ${ids.name}`);
+    }
+
+    const attach: { role: 'os' | 'data'; lun?: number; id: string; name: string }[] = [];
+    for (const d of rb.disks) {
+      if (!fromSnapshots) {
+        attach.push({ role: d.role, ...(d.lun !== undefined ? { lun: d.lun } : {}), id: d.originalDiskId, name: d.originalDiskName });
+        continue;
+      }
+      const snap = (job.snapshots ?? []).find((s) => s.diskId.toLowerCase() === d.originalDiskId.toLowerCase());
+      if (!snap) throw new Error(`No snapshot of ${d.originalDiskName}; the Gen1 VM cannot be recreated`);
+      const name = rebuildDiskName(d.originalDiskName, job.id, 'orig');
+      const path = diskPath(ids.subscriptionId, ids.resourceGroup, name);
+      // hyperVGeneration is not copied, so the disk inherits Gen1 from the snapshot even though the original disk is Gen2 now
+      const originalDisk = await this.tryGet(d.originalDiskId, DISK_API);
+      await arm.send('PUT', `${path}?api-version=${DISK_API}`, newDiskBody({ location: def.location, ...(def.zones ? { zones: def.zones } : {}), snapshotId: snap.snapshotId, original: originalDisk && (d.role === 'os' ? { ...originalDisk, properties: { ...originalDisk.properties, hyperVGeneration: 'V1' } } : originalDisk), osType: def.properties?.storageProfile?.osDisk?.osType, tags: { sourceVm: ids.name, jobId: job.id } }));
+      attach.push({ role: d.role, ...(d.lun !== undefined ? { lun: d.lun } : {}), id: path, name });
+      this.event(job, 'info', 'Rollback', `Disk ${name} recreated from snapshot ${snap.snapshotName}`);
+    }
+
+    await this.createVm(job, rb, orig.vmSize, orig.diskControllerType, attach);
+    if (orig.powerState === 'running' || orig.powerState === 'starting') await this.waitFor(vmId, 'running');
+    this.event(job, 'info', 'Rollback', `VM ${ids.name} recreated as ${orig.vmSize} (${orig.diskControllerType}) from ${fromSnapshots ? 'the snapshots' : 'the original disks'}`);
+
+    // Disks that only the rebuilt VM used are no longer needed
+    for (const d of rb.disks) {
+      for (const id of [d.newDiskId, fromSnapshots ? d.originalDiskId : undefined]) {
+        if (!id) continue;
+        try {
+          await arm.send('DELETE', `${id}?api-version=${DISK_API}`);
+        } catch (e) {
+          this.event(job, 'warn', 'Rollback', `Could not delete leftover disk ${id.split('/').pop()}: ${errText(e)}`);
+        }
+      }
+    }
+    rb.vmDeleted = false;
+    rb.vmCreated = false;
+    rb.upgradeStarted = false;
   }
 
   /** Polls until provisioning succeeded and the power state matches. */

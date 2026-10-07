@@ -91,6 +91,12 @@ export interface VmNic {
 
 export type CheckStatus = 'PASS' | 'WARN' | 'BLOCK';
 
+/** inPlace = resize the existing VM; rebuild = recreate the VM definition (opt-in, more invasive) */
+export type MigrationStrategy = 'inPlace' | 'rebuild';
+
+/** recreate = new disks + new VM (Windows temp-disk source -> diskless target); gen1-upgrade = Gen1 -> Trusted launch/Gen2 upgrade, then resize */
+export type RebuildKind = 'recreate' | 'gen1-upgrade';
+
 export interface CheckResult {
   /** Stable check id, e.g. "sku-availability" */
   checkId: string;
@@ -113,6 +119,11 @@ export interface PreCheckResult {
   targetSelection?: 'explicit' | 'auto';
   /** Candidates evaluated during auto selection, in rank order */
   candidatesEvaluated?: { sku: string; overall: CheckStatus }[];
+  /** Strategy the checks were evaluated for (default inPlace) */
+  strategy?: MigrationStrategy;
+  /** True when in-place resize cannot reach the preferred v6/v7 target but the opt-in rebuild strategy can */
+  rebuildAvailable?: boolean;
+  rebuildKind?: RebuildKind;
 }
 
 export interface TargetCandidate {
@@ -129,9 +140,11 @@ export interface TargetCandidate {
 
 export type MigrationStep =
   | 'Validated'
+  | 'Prepared'
   | 'SnapshotTaken'
   | 'Deallocated'
   | 'Updated'
+  | 'Rebuilt'
   | 'Started'
   | 'PostChecked'
   | 'Done';
@@ -156,6 +169,8 @@ export interface MigrationPlan {
   targetSku: string;
   sourceDiskController?: DiskControllerType;
   targetDiskController?: DiskControllerType;
+  strategy?: MigrationStrategy;
+  rebuildKind?: RebuildKind;
   dryRun: boolean;
   actions: PlannedAction[];
   /** Pre-check outcome the plan is based on */
@@ -198,6 +213,36 @@ export interface OriginalVmModel {
   tags?: Record<string, string>;
   publicIps?: { id: string; allocationMethod?: string }[];
   backupProtected?: boolean;
+  /** Rebuild strategy only: everything needed to recreate the original VM */
+  rebuild?: RebuildState;
+}
+
+export interface RebuildDisk {
+  role: 'os' | 'data';
+  lun?: number;
+  /** Disk attached to the original VM (kept until cleanup) */
+  originalDiskId: string;
+  originalDiskName: string;
+  snapshotId?: string;
+  /** Disk created from the snapshot for the rebuilt VM */
+  newDiskId?: string;
+  newDiskName?: string;
+}
+
+export interface RebuildState {
+  kind: RebuildKind;
+  /** Raw ARM VM definition captured before any change (contains no protected settings) */
+  definition: unknown;
+  /** Raw ARM extension resources captured before any change */
+  extensions: unknown[];
+  disks: RebuildDisk[];
+  /** Gen1 upgrade was started: the original disks may be Gen2 now, so rollback recreates disks from snapshots */
+  upgradeStarted?: boolean;
+  /** The original VM was deleted (the VM that exists now, if any, is the rebuilt one) */
+  vmDeleted?: boolean;
+  vmCreated?: boolean;
+  originalDisksDeleted?: boolean;
+  pagefile?: string;
 }
 
 export interface JobEvent {
@@ -239,5 +284,11 @@ export interface MigrationJobOptions {
   guestProbe?: boolean;
   /** Roll back automatically when the post-check overall result is FAIL (default: only recommend) */
   autoRollbackOnPostCheckFail?: boolean;
+  /** 'rebuild' recreates the VM (downtime, new VM resource); requires confirmRebuild for a real run */
+  strategy?: MigrationStrategy;
+  /** Explicit acknowledgement of downtime and VM recreation */
+  confirmRebuild?: boolean;
+  /** Windows rebuild: move the pagefile from the temp disk to C: via run-command first (default true) */
+  movePagefile?: boolean;
 }
 

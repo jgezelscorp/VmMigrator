@@ -1,5 +1,5 @@
 import type { SkuInfo, UsageInfo } from '../azure/skus.js';
-import type { CheckResult, DiskControllerType, VmInfo } from '../domain/types.js';
+import type { CheckResult, DiskControllerType, MigrationStrategy, VmInfo } from '../domain/types.js';
 
 export interface ResourceLock {
   name: string;
@@ -27,6 +27,8 @@ export interface PreCheckContext {
   /** DiskControllerTypes feature of the marketplace image, when published */
   imageControllers?: string[];
   availabilitySetVms?: { id: string; name: string }[];
+  /** Strategy being evaluated (default inPlace) */
+  strategy?: MigrationStrategy;
   /** What could not be loaded (check id or data name -> error) */
   loadErrors: Record<string, string>;
   now: Date;

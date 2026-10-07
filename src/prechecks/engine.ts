@@ -2,8 +2,8 @@ import type { ArmClient } from '../azure/arm.js';
 import type { SkuInfo, SkuService } from '../azure/skus.js';
 import { buildCandidateTargets, parseVcpuFromSize, type Catalog } from '../catalog/index.js';
 import { COMPUTE_API } from '../discovery/discovery.js';
-import type { CheckResult, CheckStatus, PreCheckResult, VmInfo } from '../domain/types.js';
-import { PRE_CHECKS, requiredController, targetGenerationOf } from './checks.js';
+import type { CheckResult, CheckStatus, MigrationStrategy, PreCheckResult, VmInfo } from '../domain/types.js';
+import { assessRebuild, inPlaceObstacle, PRE_CHECKS, requiredController, targetGenerationOf } from './checks.js';
 import type { BackupState, PreCheck, PreCheckContext, ResourceLock } from './types.js';
 
 export interface PreCheckDeps {
@@ -20,6 +20,8 @@ export interface PreCheckOptions {
   targetSku?: string;
   includeOptionalTargets?: boolean;
   preferVendor?: 'AMD' | 'Intel';
+  /** 'rebuild' evaluates the opt-in recreate/Gen1-upgrade strategy; default inPlace */
+  strategy?: MigrationStrategy;
   /** Max candidates evaluated in auto mode */
   maxCandidates?: number;
 }
@@ -98,7 +100,7 @@ async function loadFacts(deps: PreCheckDeps, vm: VmInfo): Promise<VmFacts> {
 function candidateSkus(deps: PreCheckDeps, vm: VmInfo, source: SkuInfo | undefined, opts: PreCheckOptions): string[] {
   // Windows cannot resize from a resource-disk size to a size without one, and v6/v7 have none (their d disk is local NVMe), so offer v5.
   const windowsNeedsResourceDisk = vm.osType === 'Windows' && (source?.maxResourceVolumeMB ?? 0) > 0;
-  const optional = opts.includeOptionalTargets || vm.hyperVGeneration === 'V1' || windowsNeedsResourceDisk;
+  const optional = opts.strategy !== 'rebuild' && (opts.includeOptionalTargets || vm.hyperVGeneration === 'V1' || windowsNeedsResourceDisk);
   const series = vm.retiringSeries;
   if (series) {
     const vcpu = source?.vcpus || parseVcpuFromSize(vm.vmSize);
@@ -148,6 +150,7 @@ export async function runPreChecks(deps: PreCheckDeps, vm: VmInfo, opts: PreChec
       ...(target ? { target } : {}),
       ...(source ? { source } : {}),
       targetGeneration: targetGenerationOf(targetSku),
+      ...(opts.strategy ? { strategy: opts.strategy } : {}),
       ...(facts.usages ? { usages: facts.usages } : {}),
       ...(facts.locks ? { locks: facts.locks } : {}),
       ...(facts.backup ? { backup: facts.backup } : {}),
@@ -158,6 +161,13 @@ export async function runPreChecks(deps: PreCheckDeps, vm: VmInfo, opts: PreChec
     };
   };
 
+  const rebuildFacts = (ctx: PreCheckContext): Partial<PreCheckResult> => {
+    const obstacle = inPlaceObstacle(ctx);
+    if (!obstacle) return {};
+    const a = assessRebuild(vm, obstacle);
+    return a.feasible ? { rebuildAvailable: true, rebuildKind: a.kind } : {};
+  };
+
   const build = (ctx: PreCheckContext, checks: CheckResult[], extra: Partial<PreCheckResult>): PreCheckResult => ({
     vmId: vm.id,
     targetSku: ctx.targetSku,
@@ -166,6 +176,8 @@ export async function runPreChecks(deps: PreCheckDeps, vm: VmInfo, opts: PreChec
     checks,
     ranAt: now.toISOString(),
     ...(ctx.target ? { targetDiskController: requiredController(vm, ctx.target).controller } : {}),
+    strategy: opts.strategy ?? 'inPlace',
+    ...rebuildFacts(ctx),
     ...extra,
   });
 
@@ -178,6 +190,7 @@ export async function runPreChecks(deps: PreCheckDeps, vm: VmInfo, opts: PreChec
   const evaluated: { sku: string; overall: CheckStatus }[] = [];
   let best: { ctx: PreCheckContext; checks: CheckResult[] } | undefined;
   let firstExisting: typeof best;
+  let hint: { sku: string; facts: Partial<PreCheckResult> } | undefined;
   for (const sku of names.slice(0, opts.maxCandidates ?? 20)) {
     const ctx = contextFor(sku);
     if (!ctx.target && facts.loadErrors['skus'] === undefined) {
@@ -187,6 +200,10 @@ export async function runPreChecks(deps: PreCheckDeps, vm: VmInfo, opts: PreChec
     const checks = await evaluate(deps, ctx);
     const overall = worstStatus(checks);
     evaluated.push({ sku, overall });
+    if (!firstExisting) {
+      const f = rebuildFacts(ctx);
+      if (f.rebuildAvailable) hint = { sku, facts: f };
+    }
     firstExisting ??= { ctx, checks };
     if (overall !== 'BLOCK') {
       best = { ctx, checks };
@@ -213,7 +230,18 @@ export async function runPreChecks(deps: PreCheckDeps, vm: VmInfo, opts: PreChec
       candidatesEvaluated: evaluated,
     };
   }
-  return build(chosen.ctx, chosen.checks, { targetSelection: 'auto', candidatesEvaluated: evaluated });
+  let chosenChecks = chosen.checks;
+  let extra: Partial<PreCheckResult> = {};
+  if (hint && chosen.ctx.targetSku !== hint.sku && opts.strategy !== 'rebuild') {
+    // In-place fell back to a v5 target; tell the user the preferred v6/v7 target is reachable through the opt-in rebuild
+    extra = hint.facts;
+    chosenChecks = chosenChecks.map((c) =>
+      c.checkId === 'rebuild-strategy'
+        ? { checkId: 'rebuild-strategy', status: 'WARN' as const, message: `${hint.sku} cannot be reached by an in-place resize, so ${chosen.ctx.targetSku} was selected; the rebuild strategy can still reach ${hint.sku}.`, remediation: 'Opt in with strategy "rebuild" (options.strategy=rebuild, UI checkbox): the VM is deleted and recreated; downtime applies.' }
+        : c,
+    );
+  }
+  return build(chosen.ctx, chosenChecks, { targetSelection: 'auto', candidatesEvaluated: evaluated, ...extra });
 }
 
 /** Human-readable summary of a pre-check result. */

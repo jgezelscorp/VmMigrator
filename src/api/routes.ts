@@ -47,11 +47,15 @@ function optionsOf(body: unknown): MigrationJobOptions {
   if (typeof o !== 'object' || o === null || Array.isArray(o)) throw new BadRequest('options must be an object');
   const r = o as Record<string, unknown>;
   const out: MigrationJobOptions = {};
-  for (const k of ['cleanupSnapshots', 'skipSnapshots', 'guestProbe', 'autoRollbackOnPostCheckFail'] as const) {
+  for (const k of ['cleanupSnapshots', 'skipSnapshots', 'guestProbe', 'autoRollbackOnPostCheckFail', 'confirmRebuild', 'movePagefile'] as const) {
     if (r[k] !== undefined) {
       if (typeof r[k] !== 'boolean') throw new BadRequest(`options.${k} must be a boolean`);
       out[k] = r[k] as boolean;
     }
+  }
+  if (r['strategy'] !== undefined) {
+    if (r['strategy'] !== 'inPlace' && r['strategy'] !== 'rebuild') throw new BadRequest("options.strategy must be 'inPlace' or 'rebuild'");
+    out.strategy = r['strategy'];
   }
   const w = r['maintenanceWindow'] as { start?: unknown; end?: unknown } | undefined;
   if (w !== undefined) {
@@ -120,7 +124,8 @@ export function buildApp(opts: BuildOptions = {}): FastifyInstance {
   app.post('/api/vms/precheck', async (req) => {
     const ids = vmIdsOf(req.body);
     const overrides = overridesOf(req.body);
-    const results = await mapLimit(ids, 3, async (id) => ctx.preCheck(await ctx.getVm(id), overrides[id]));
+    const strategy = optionsOf({ options: { strategy: (req.body as { strategy?: unknown }).strategy } }).strategy;
+    const results = await mapLimit(ids, 3, async (id) => ctx.preCheck(await ctx.getVm(id), overrides[id], strategy ? { strategy } : undefined));
     return { results };
   });
 

@@ -1,6 +1,6 @@
-import type { CheckResult, CheckStatus, DiskControllerType, VmInfo } from '../domain/types.js';
+import type { CheckResult, CheckStatus, DiskControllerType, RebuildKind, VmInfo } from '../domain/types.js';
 import type { SkuInfo } from '../azure/skus.js';
-import type { PreCheck, TargetRequirement } from './types.js';
+import type { PreCheck, PreCheckContext, TargetRequirement } from './types.js';
 
 const result = (checkId: string, status: CheckStatus, message: string, remediation?: string): CheckResult => ({
   checkId,
@@ -80,6 +80,44 @@ export function assessNvmeOs(vm: VmInfo): { support: OsSupport; detail: string }
 const isPremium = (t?: string): boolean => !!t && /^(premium|ultra)/i.test(t);
 const hasTemp = (s: SkuInfo | undefined, fallback: boolean): boolean => (s ? s.maxResourceVolumeMB > 0 : fallback);
 
+export type InPlaceObstacle = 'windows-temp-disk' | 'gen1';
+
+/** Why Azure refuses an in-place resize to the target, when it does (the cases the rebuild strategy exists for). */
+export function inPlaceObstacle(ctx: Pick<PreCheckContext, 'vm' | 'source' | 'target'>): InPlaceObstacle | undefined {
+  const { vm, source, target } = ctx;
+  if (!target) return undefined;
+  if (vm.hyperVGeneration === 'V1' && !target.generations.includes('V1')) return 'gen1';
+  if (vm.osType === 'Windows' && hasTemp(source, true) && !hasTemp(target, false)) return 'windows-temp-disk';
+  return undefined;
+}
+
+const GEN1_UPGRADE_PUBLISHERS = /^(canonical|redhat|suse)$/i;
+
+export interface RebuildAssessment {
+  feasible: boolean;
+  kind: RebuildKind;
+  problems: string[];
+}
+
+/** Whether the opt-in rebuild strategy can handle the obstacle for this VM (research: MS Learn Gen1 -> Trusted launch upgrade). */
+export function assessRebuild(vm: VmInfo, obstacle: InPlaceObstacle): RebuildAssessment {
+  const problems: string[] = [];
+  if (!vm.osDisk?.id || vm.ephemeralOsDisk) problems.push('the OS disk is ephemeral or unmanaged');
+  if (vm.encryption?.ade) problems.push('Azure Disk Encryption is enabled');
+  if (vm.virtualMachineScaleSetId) problems.push('the VM belongs to a scale set');
+  if (vm.securityType === 'ConfidentialVM') problems.push('the VM is a Confidential VM');
+  if (obstacle === 'gen1') {
+    if (vm.osType === 'Windows') {
+      problems.push('Windows Gen1 VMs need an MBR2GPT conversion inside the guest before the Trusted launch upgrade (not automated)');
+    } else if (!GEN1_UPGRADE_PUBLISHERS.test(vm.imageReference?.publisher ?? '')) {
+      problems.push('the Gen1 -> Trusted launch upgrade is only supported for Marketplace Canonical, Red Hat and SUSE images');
+    }
+  }
+  return { feasible: problems.length === 0, kind: obstacle === 'gen1' ? 'gen1-upgrade' : 'recreate', problems };
+}
+
+const REBUILD_HINT = 'Opt in with strategy "rebuild" (options.strategy=rebuild, UI checkbox): the VM is deleted and recreated; downtime applies.';
+
 export const PRE_CHECKS: PreCheck[] = [
   {
     id: 'vm-state',
@@ -137,11 +175,15 @@ export const PRE_CHECKS: PreCheck[] = [
   },
   {
     id: 'generation',
-    run: ({ vm, target, targetSku, targetGeneration }) => {
+    run: (ctx) => {
+      const { vm, target, targetSku, targetGeneration } = ctx;
       const gen2Only = target ? !target.generations.includes('V1') : targetGeneration >= 6;
       if (!vm.hyperVGeneration) return warn('generation', 'Hyper-V generation of the VM is unknown.', 'Verify the VM is Generation 2 before migrating to v6/v7.');
       if (vm.hyperVGeneration === 'V1' && gen2Only) {
-        return block('generation', `VM is Generation 1 and ${targetSku} only supports Generation 2.`, 'Rebuild from a Gen2 image, convert via snapshot/MBR2GPT, or fall back to a v5 target (Gen1 capable).');
+        if (ctx.strategy === 'rebuild' && target && assessRebuild(vm, 'gen1').feasible) {
+          return warn('generation', `VM is Generation 1 and ${targetSku} is Generation 2 only; the rebuild strategy upgrades it to Gen2 via the supported Trusted launch upgrade (not reversible in place; rollback recreates the Gen1 VM from snapshots).`, 'Validate the guest boots as Gen2/UEFI on a test VM first.');
+        }
+        return block('generation', `VM is Generation 1 and ${targetSku} only supports Generation 2.`, `Opt in to the rebuild strategy (Gen1 -> Trusted launch/Gen2 upgrade, Linux Marketplace images), or fall back to a v5 target (Gen1 capable).`);
       }
       return pass('generation', `VM is ${vm.hyperVGeneration === 'V2' ? 'Generation 2' : 'Generation 1'}; compatible with ${targetSku}.`);
     },
@@ -182,13 +224,17 @@ export const PRE_CHECKS: PreCheck[] = [
   },
   {
     id: 'temp-disk',
-    run: ({ vm, source, target, targetSku }) => {
+    run: (ctx) => {
+      const { vm, source, target, targetSku } = ctx;
       if (!target) return warn('temp-disk', 'Temp disk compatibility not evaluated because the target size is unavailable.');
       const src = hasTemp(source, true);
       const dst = hasTemp(target, false);
       if (src && !dst) {
         if (vm.osType === 'Windows') {
-          return block('temp-disk', `Windows cannot resize from a size with a SCSI resource (temp) disk to ${targetSku}, which has none (a v6/v7 "d" size only has local NVMe storage).`, 'Choose a v5 size with a resource disk (e.g. Standard_D2ads_v5 / Standard_D2ds_v5), or move the pagefile to C:, snapshot, and create a new VM from the disk.');
+          if (ctx.strategy === 'rebuild' && assessRebuild(vm, 'windows-temp-disk').feasible) {
+            return warn('temp-disk', `Windows cannot resize in place from a resource (temp) disk size to ${targetSku}; the rebuild strategy recreates the VM from copies of its disks instead. D: and its contents are gone afterwards.`, 'Keep nothing you need on D:; the pagefile is moved to C: first.');
+          }
+          return block('temp-disk', `Windows cannot resize from a size with a SCSI resource (temp) disk to ${targetSku}, which has none (a v6/v7 "d" size only has local NVMe storage).`, 'Opt in to the rebuild strategy (recreates the VM from its disks), or choose a v5 size with a resource disk (e.g. Standard_D2ads_v5 / Standard_D2ds_v5).');
         }
         return warn('temp-disk', `${targetSku} has no temp disk; /mnt, swap and scratch data will be gone.`, 'Remove temp-disk dependencies (fstab /mnt, waagent ResourceDisk) before migrating.');
       }
@@ -354,6 +400,30 @@ export const PRE_CHECKS: PreCheck[] = [
       if (vm.securityType === 'ConfidentialVM') return block('security-type', 'Confidential VMs cannot be migrated to general-purpose v6/v7 sizes.', 'Use a confidential VM size family.');
       if (vm.securityType === 'TrustedLaunch') return pass('security-type', 'Trusted Launch is supported by v6/v7 sizes.');
       return pass('security-type', 'Standard security type.');
+    },
+  },
+  {
+    id: 'rebuild-strategy',
+    run: (ctx) => {
+      const obstacle = inPlaceObstacle(ctx);
+      const a = obstacle ? assessRebuild(ctx.vm, obstacle) : undefined;
+      if (ctx.strategy === 'rebuild') {
+        if (!obstacle || !a) {
+          return warn('rebuild-strategy', 'Rebuild was requested but an in-place resize is possible; rebuilding (VM deleted and recreated, new disks) is more invasive than needed.', 'Use the in-place strategy unless you specifically need a rebuild.');
+        }
+        if (!a.feasible) return block('rebuild-strategy', `The rebuild strategy cannot be used: ${a.problems.join('; ')}.`, 'Resolve the listed points or choose an in-place v5 target.');
+        return warn(
+          'rebuild-strategy',
+          a.kind === 'gen1-upgrade'
+            ? 'Rebuild (Gen1 upgrade): the VM is deallocated, upgraded to Trusted launch/Gen2 (not reversible in place), then resized to the target; rollback recreates the Gen1 VM from the snapshots.'
+            : 'Rebuild (recreate): the VM is stopped, new disks are created from snapshots, the VM resource is deleted and recreated with the same name, NICs/IPs, tags, zone and availability set. Downtime applies; system-assigned identities get a new principal id.',
+          'Original disks and the VM definition are kept for rollback.',
+        );
+      }
+      if (obstacle && a?.feasible) {
+        return warn('rebuild-strategy', `An in-place resize to ${ctx.targetSku} is impossible (${obstacle === 'gen1' ? 'Gen1 VM, Gen2-only size' : 'Windows resource disk -> diskless size'}), but the rebuild strategy can reach it.`, REBUILD_HINT);
+      }
+      return pass('rebuild-strategy', 'An in-place resize is possible; no rebuild needed.');
     },
   },
   {

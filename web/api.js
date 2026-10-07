@@ -79,11 +79,11 @@ export function createApi({ mock = false, baseUrl = '', fetchImpl = (...a) => fe
       if (retiringOnly) q.set('retiring', 'true');
       return list(await http('GET', `/api/vms?${q}`), 'vms');
     },
-    async precheck(vmIds, targetOverrides = {}) {
+    async precheck(vmIds, targetOverrides = {}, strategy) {
       if (mock) return mockPrecheck(vmIds, targetOverrides);
-      return list(await http('POST', '/api/vms/precheck', { vmIds, targetOverrides }), 'results');
+      return list(await http('POST', '/api/vms/precheck', { vmIds, targetOverrides, ...(strategy ? { strategy } : {}) }), 'results');
     },
-    async startMigration({ vmIds, dryRun, targetOverrides = {} }) {
+    async startMigration({ vmIds, dryRun, targetOverrides = {}, options }) {
       if (mock) {
         const vms = list(await fixture('vms.json'), 'vms');
         const created = vmIds.map((vmId) => {
@@ -99,7 +99,7 @@ export function createApi({ mock = false, baseUrl = '', fetchImpl = (...a) => fe
         });
         return created;
       }
-      const res = await http('POST', '/api/migrations', { vmIds, dryRun, targetOverrides });
+      const res = await http('POST', '/api/migrations', { vmIds, dryRun, targetOverrides, ...(options ? { options } : {}) });
       return Array.isArray(res) ? res : res.jobs ?? [res];
     },
     async getMigration(id) {

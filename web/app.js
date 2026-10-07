@@ -26,7 +26,7 @@ export function suggestTarget(vm) {
 export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
   const $ = (id) => doc.getElementById(id);
   const client = api ?? createApi({ mock });
-  const state = { vms: [], selected: new Set(), targets: {}, prechecks: {}, polling: new Map(), jobs: new Map() };
+  const state = { vms: [], selected: new Set(), targets: {}, prechecks: {}, polling: new Map(), jobs: new Map(), rebuild: new Set() };
   if (mock) $('mock-badge').hidden = false;
 
   const showError = (e) => { $('error').hidden = !e; $('error').textContent = e ? (e.message ?? String(e)) : ''; };
@@ -38,6 +38,7 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
       state.vms = await client.listVms({ subscriptionId: subId(), retiringOnly });
       state.selected.clear();
       state.prechecks = {};
+      state.rebuild.clear();
       $('precheck').replaceChildren();
       renderTable();
     } catch (e) { showError(e); }
@@ -55,7 +56,7 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
     const opts = [...new Set([current, ...SKU_CHOICES])];
     return h('select', {
       'aria-label': `Target SKU for ${vm.name}`,
-      onchange: (e) => { state.targets[vm.id] = e.target.value; delete state.prechecks[vm.id]; updateButtons(); },
+      onchange: (e) => { state.targets[vm.id] = e.target.value; delete state.prechecks[vm.id]; state.rebuild.delete(vm.id); updateButtons(); },
     }, opts.map((s) => h('option', { value: s, selected: s === current }, s)));
   }
 
@@ -79,7 +80,6 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
   }
 
   const targetFor = (id) => state.targets[id] ?? state.prechecks[id]?.targetSku ?? suggestTarget(state.vms.find((v) => v.id === id));
-  const overrides = () => Object.fromEntries([...state.selected].map((id) => [id, targetFor(id)]));
   const blocked = () => [...state.selected].some((id) => state.prechecks[id]?.overall === 'BLOCK');
   const prechecked = () => [...state.selected].every((id) => state.prechecks[id]);
 
@@ -96,8 +96,12 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
       const r = state.prechecks[id];
       const vm = state.vms.find((v) => v.id === id);
       if (!r) return '';
+      const canRebuild = r.rebuildAvailable || r.strategy === 'rebuild';
       return h('div', { class: 'card' },
-        h('h3', {}, vm?.name ?? id, ' → ', r.targetSku, ' ', badge(r.overall)),
+        h('h3', {}, vm?.name ?? id, ' → ', r.targetSku, ' ', badge(r.overall), r.strategy === 'rebuild' ? ' (rebuild)' : ''),
+        canRebuild ? h('label', { class: 'rebuild-opt' },
+          h('input', { type: 'checkbox', 'aria-label': `Use rebuild strategy for ${vm?.name ?? id}`, checked: state.rebuild.has(id), onchange: (e) => toggleRebuild(id, e.target.checked) }),
+          ' Use rebuild strategy (opt-in): the VM is deleted and recreated from its disks, causing longer downtime') : '',
         h('ul', {}, r.checks.map((c) => h('li', {}, badge(c.status), ` ${c.checkId}: ${c.message}`,
           c.remediation ? h('div', { class: 'remed' }, `Remediation: ${c.remediation}`) : ''))));
     }));
@@ -106,10 +110,20 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
   async function runPrecheck() {
     showError(null);
     try {
-      const results = await client.precheck([...state.selected], overrides());
-      for (const r of results) { state.prechecks[r.vmId] = r; state.targets[r.vmId] = r.targetSku; }
+      const ids = [...state.selected];
+      const groups = [[ids.filter((id) => !state.rebuild.has(id)), undefined], [ids.filter((id) => state.rebuild.has(id)), 'rebuild']];
+      for (const [group, strategy] of groups) {
+        if (!group.length) continue;
+        const o = Object.fromEntries(group.map((id) => [id, targetFor(id)]));
+        for (const r of await client.precheck(group, o, strategy)) { state.prechecks[r.vmId] = r; state.targets[r.vmId] = r.targetSku; }
+      }
       renderPrecheck(); renderTable();
     } catch (e) { showError(e); }
+  }
+
+  async function toggleRebuild(id, on) {
+    if (on) state.rebuild.add(id); else state.rebuild.delete(id);
+    await runPrecheck();
   }
 
   function confirmMigration() {
@@ -120,7 +134,8 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
     $('confirm-body').replaceChildren(h('ul', {}, [...state.selected].map((id) => {
       const vm = state.vms.find((v) => v.id === id);
       const r = state.prechecks[id];
-      return h('li', {}, `${vm.name}: ${vm.vmSize} → ${targetFor(id)}`, r?.overall === 'WARN' ? ' (has warnings)' : '');
+      return h('li', {}, `${vm.name}: ${vm.vmSize} → ${targetFor(id)}`, r?.overall === 'WARN' ? ' (has warnings)' : '',
+        state.rebuild.has(id) ? ' REBUILD: the VM is stopped, deleted and recreated (new disks from snapshots, same NICs/IPs); expect extended downtime' : '');
     })));
     return new Promise((resolve) => {
       const done = (ok) => { dlg.removeAttribute('open'); ack.onchange = null; go.onclick = null; $('confirm').querySelector('button[value=cancel]').onclick = null; resolve(ok); };
@@ -135,7 +150,12 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
     if (!dryRun && !(await confirmMigration())) return;
     showError(null);
     try {
-      const jobs = await client.startMigration({ vmIds: [...state.selected], dryRun, targetOverrides: overrides() });
+      const ids = [...state.selected];
+      const jobs = [];
+      for (const [group, options] of [[ids.filter((id) => !state.rebuild.has(id)), undefined], [ids.filter((id) => state.rebuild.has(id)), { strategy: 'rebuild', confirmRebuild: true }]]) {
+        if (!group.length) continue;
+        jobs.push(...await client.startMigration({ vmIds: group, dryRun, targetOverrides: Object.fromEntries(group.map((id) => [id, targetFor(id)])), options }));
+      }
       for (const j of jobs) { state.jobs.set(j.id, j); poll(j.id); }
       renderProgress();
     } catch (e) { showError(e); }
@@ -163,13 +183,14 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
   }
 
   const STEPS = ['Validated', 'SnapshotTaken', 'Deallocated', 'Updated', 'Started', 'PostChecked', 'Done'];
+  const REBUILD_STEPS = ['Validated', 'Prepared', 'SnapshotTaken', 'Deallocated', 'Rebuilt', 'Started', 'PostChecked', 'Done'];
   function renderProgress() {
     $('progress').replaceChildren(...[...state.jobs.values()].map((j) => {
       const vm = state.vms.find((v) => v.id === j.plan.vmId);
       const kids = [
         h('h3', {}, vm?.name ?? j.plan.vmId, ' ', j.plan.sourceSku, ' → ', j.plan.targetSku, ' ', badge(j.state),
           j.plan.dryRun ? ' (dry run)' : ''),
-        h('ol', { class: 'steps', 'aria-label': 'Migration steps' }, STEPS.map((s) =>
+        h('ol', { class: 'steps', 'aria-label': 'Migration steps' }, (j.plan.strategy === 'rebuild' ? REBUILD_STEPS : STEPS).map((s) =>
           h('li', { class: j.completedSteps.includes(s) ? 'done' : '' }, (j.completedSteps.includes(s) ? '✓ ' : '') + s))),
       ];
       if (j.error) kids.push(h('p', { class: 'error', role: 'alert' }, j.error));
