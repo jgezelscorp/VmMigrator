@@ -69,6 +69,10 @@ function sendError(reply: FastifyReply, e: unknown): FastifyReply {
   if (e instanceof JobNotFoundError) return reply.code(404).send({ error: 'NotFound', message });
   if (e instanceof MigrationRefusedError) return reply.code(409).send({ error: 'MigrationBlocked', message });
   if (e instanceof InvalidJobStateError) return reply.code(409).send({ error: 'InvalidState', message });
+  const fst = e as { code?: unknown; statusCode?: unknown };
+  if (typeof fst.code === 'string' && fst.code.startsWith('FST_') && typeof fst.statusCode === 'number' && fst.statusCode >= 400 && fst.statusCode < 500) {
+    return reply.code(fst.statusCode).send({ error: 'BadRequest', message });
+  }
   const name = e instanceof Error ? e.name : '';
   if (/CredentialUnavailable|AuthenticationRequired|AzureCliCredential/i.test(name + message) || /az login|Please run 'az/i.test(message)) {
     return reply.code(401).send({
