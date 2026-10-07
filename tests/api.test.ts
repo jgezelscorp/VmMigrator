@@ -39,6 +39,9 @@ describe('REST API (mock mode)', () => {
     const r = await app.inject({ method: 'POST', url: '/api/vms/precheck', payload: { vmIds: ['nope'] } });
     expect(r.statusCode).toBe(400);
     expect((await app.inject({ method: 'POST', url: '/api/migrations', payload: {} })).statusCode).toBe(400);
+    const bad = await app.inject({ method: 'POST', url: '/api/migrations', payload: '{bad', headers: { 'content-type': 'application/json' } });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error).toBe('BadRequest');
     expect((await app.inject({ url: '/api/migrations/does-not-exist' })).statusCode).toBe(404);
     await app.close();
   });
