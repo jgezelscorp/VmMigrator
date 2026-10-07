@@ -1,0 +1,10 @@
+[
+  { "name": "lnx-dsv3-g2-data", "size": "Standard_D2s_v3", "os": "linux", "gen": 2, "dataDisk": true, "avset": false },
+  { "name": "win-dsv3-g2", "size": "Standard_D2s_v3", "os": "windows", "gen": 2, "dataDisk": false, "avset": false },
+  { "name": "lnx-dsv3-g1", "size": "Standard_D2s_v3", "os": "linux", "gen": 1, "dataDisk": false, "avset": false },
+  { "name": "lnx-dsv2-g2-avs1", "size": "Standard_DS2_v2", "os": "linux", "gen": 2, "dataDisk": false, "avset": true },
+  { "name": "lnx-dsv2-g2-avs2", "size": "Standard_DS2_v2", "os": "linux", "gen": 2, "dataDisk": false, "avset": true },
+  { "name": "win-esv3-g2", "size": "Standard_E2s_v3", "os": "windows", "gen": 2, "dataDisk": false, "avset": false },
+  { "name": "lnx-av2-g1", "size": "Standard_A2_v2", "os": "linux", "gen": 1, "dataDisk": false, "avset": false },
+  { "name": "lnx-fsv2-g2", "size": "Standard_F2s_v2", "os": "linux", "gen": 2, "dataDisk": false, "avset": false }
+]
