@@ -61,3 +61,12 @@ Fallbacks: try `westeurope`, `northeurope`, `eastus2`; use `-Series` to drop ser
 ```powershell
 .\demo\cleanup.ps1    # deletes rg-vmmigrator-demo (only if tagged purpose=vm-migrator-demo)
 ```
+
+## Reset to the starting state
+
+After migrating, restore the original v1/v2/v3 fleet (deletes the resource group, waits, redeploys):
+
+```powershell
+.\demo\rebuild.ps1                # same options as deploy.ps1 (-Series, -Location, -NoAutoShutdown)
+.\demo\rebuild.ps1 -ClearJobs     # also wipes local data\jobs migration history
+```
