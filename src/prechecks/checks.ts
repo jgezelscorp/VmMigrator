@@ -188,7 +188,7 @@ export const PRE_CHECKS: PreCheck[] = [
       const dst = hasTemp(target, false);
       if (src && !dst) {
         if (vm.osType === 'Windows') {
-          return block('temp-disk', `Windows cannot resize from a size with a temp disk to the diskless ${targetSku}.`, 'Choose a "d" size (e.g. Dadsv7), or move the pagefile to C:, snapshot, and create a new VM from the disk.');
+          return block('temp-disk', `Windows cannot resize from a size with a SCSI resource (temp) disk to ${targetSku}, which has none (a v6/v7 "d" size only has local NVMe storage).`, 'Choose a v5 size with a resource disk (e.g. Standard_D2ads_v5 / Standard_D2ds_v5), or move the pagefile to C:, snapshot, and create a new VM from the disk.');
         }
         return warn('temp-disk', `${targetSku} has no temp disk; /mnt, swap and scratch data will be gone.`, 'Remove temp-disk dependencies (fstab /mnt, waagent ResourceDisk) before migrating.');
       }

@@ -74,6 +74,26 @@ export function powerStateOf(statuses: Raw[] | undefined): PowerState {
   }
 }
 
+/**
+ * The subscription-level list with `$expand=instanceView` returns 502 ProviderError on real Azure,
+ * so list plain VMs and fetch each instance view with a per-VM GET.
+ */
+async function listVmsWithInstanceView(arm: ArmClient, sub: string, concurrency: number): Promise<Raw[]> {
+  const base = `/subscriptions/${sub}/providers/Microsoft.Compute/virtualMachines?api-version=${COMPUTE_API}`;
+  try {
+    return await arm.list<Raw>(`${base}&$expand=instanceView`);
+  } catch {
+    const plain = await arm.list<Raw>(base);
+    return mapLimit(plain, concurrency, async (vm) => {
+      try {
+        return await arm.get<Raw>(`${String(vm.id)}?api-version=${COMPUTE_API}&$expand=instanceView`);
+      } catch {
+        return vm;
+      }
+    });
+  }
+}
+
 const ADE_EXTENSION_TYPES = /^AzureDiskEncryption(ForLinux)?$/i;
 
 export function normalizeVm(raw: Raw, lookups: SubscriptionLookups | undefined, catalog: Catalog): VmInfo {
@@ -226,7 +246,7 @@ export async function discoverVms(
 
   const perSub = await mapLimit(subs, opts.concurrency ?? 3, async (sub) => {
     const [rawVms, lookups] = await Promise.all([
-      arm.list<Raw>(`/subscriptions/${sub}/providers/Microsoft.Compute/virtualMachines?api-version=${COMPUTE_API}&$expand=instanceView`),
+      listVmsWithInstanceView(arm, sub, opts.concurrency ?? 5),
       loadLookups(arm, sub, warn),
     ]);
     return rawVms.map((r) => normalizeVm(r, lookups, catalog));
@@ -239,12 +259,14 @@ export async function discoverVms(
     if (!vm.retiringSeries) return;
     let vcpu = parseVcpuFromSize(vm.vmSize);
     let memoryGb: number | undefined;
+    let sourceHasTempDisk = false;
     try {
       const sku = await skuService.getSku(vm.subscriptionId, vm.location, vm.vmSize);
       if (sku?.vcpus) {
         vcpu = sku.vcpus;
         memoryGb = sku.memoryGb || undefined;
       }
+      sourceHasTempDisk = (sku?.maxResourceVolumeMB ?? 0) > 0;
     } catch (e) {
       warn(`${vm.name}: SKU lookup failed, falling back to name parsing: ${(e as Error).message}`);
     }
@@ -252,7 +274,8 @@ export async function discoverVms(
       ...(vcpu ? { vcpu } : {}),
       ...(memoryGb ? { memoryGb } : {}),
       osType: vm.osType,
-      includeOptional: opts.includeOptionalTargets || vm.hyperVGeneration === 'V1',
+      includeOptional:
+        opts.includeOptionalTargets || vm.hyperVGeneration === 'V1' || (vm.osType === 'Windows' && sourceHasTempDisk),
       ...(opts.preferVendor ? { preferVendor: opts.preferVendor } : {}),
     });
   });
