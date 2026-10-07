@@ -9,6 +9,17 @@ import { MockArm } from './helpers/mockArm.js';
 const catalog = loadCatalog();
 
 describe('discoverVms', () => {
+  it('falls back to per-VM instance views when the expanded list fails (live Azure 502)', async () => {
+    const inner = standardEnv([rawVm({ name: 'lnx-dsv3', size: 'Standard_D2s_v3' })]);
+    const arm = new Proxy(inner, {
+      get: (t, k, r) =>
+        k === 'list'
+          ? (p: string) => (p.includes('expand=instanceView') ? Promise.reject(new Error('502 ProviderError')) : t.list(p))
+          : Reflect.get(t, k, r),
+    });
+    const vms = await discoverVms(arm, new SkuService(arm), catalog, {});
+    expect(vms[0]).toMatchObject({ name: 'lnx-dsv3', powerState: 'running', retiringSeries: 'Dsv3' });
+  });
   it('flags retiring series, enriches VM facts and ranks candidate targets', async () => {
     const arm = standardEnv([
       rawVm({ name: 'lnx-dsv3', size: 'Standard_D2s_v3', zones: ['1'], dataDisks: 1, extensions: [{ name: 'ade', type: 'AzureDiskEncryptionForLinux' }] }),

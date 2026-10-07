@@ -96,7 +96,9 @@ async function loadFacts(deps: PreCheckDeps, vm: VmInfo): Promise<VmFacts> {
 
 /** Best-effort ranked target names for a VM: its discovered candidates, else rebuilt from the catalog. */
 function candidateSkus(deps: PreCheckDeps, vm: VmInfo, source: SkuInfo | undefined, opts: PreCheckOptions): string[] {
-  const optional = opts.includeOptionalTargets || vm.hyperVGeneration === 'V1';
+  // Windows cannot resize from a resource-disk size to a size without one, and v6/v7 have none (their d disk is local NVMe), so offer v5.
+  const windowsNeedsResourceDisk = vm.osType === 'Windows' && (source?.maxResourceVolumeMB ?? 0) > 0;
+  const optional = opts.includeOptionalTargets || vm.hyperVGeneration === 'V1' || windowsNeedsResourceDisk;
   const series = vm.retiringSeries;
   if (series) {
     const vcpu = source?.vcpus || parseVcpuFromSize(vm.vmSize);
