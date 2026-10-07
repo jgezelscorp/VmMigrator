@@ -1,0 +1,4 @@
+{ "subscriptions": [
+  { "id": "00000000-0000-0000-0000-000000000001", "name": "VmMigrator Demo" },
+  { "id": "00000000-0000-0000-0000-000000000002", "name": "Contoso Production" }
+] }

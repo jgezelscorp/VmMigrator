@@ -2,10 +2,93 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>VmMigrator</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <h1>VmMigrator</h1>
-    <p>UI placeholder (see issue #8).</p>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="topbar">
+      <h1>VmMigrator</h1>
+      <span id="mock-badge" class="badge warn" hidden>MOCK MODE</span>
+      <span class="auth" title="Authentication placeholder (Entra sign-in is tracked in #11)">&#9679; Signed in via Azure CLI</span>
+    </header>
+
+    <main id="main">
+      <section aria-labelledby="h-select">
+        <h2 id="h-select">1. Select VMs</h2>
+        <div class="row">
+          <label for="sub">Subscription</label>
+          <select id="sub"></select>
+          <input id="sub-text" type="text" placeholder="or paste subscription id" aria-label="Subscription id" />
+          <button id="btn-detect" type="button">Auto-detect retiring VMs</button>
+          <button id="btn-all" type="button" class="secondary">Show all VMs</button>
+        </div>
+        <div class="row">
+          <label for="filter">Search</label>
+          <input id="filter" type="search" placeholder="name, size, region, series…" />
+          <span id="count" aria-live="polite"></span>
+        </div>
+        <div id="error" role="alert" class="error" hidden></div>
+        <div class="table-wrap">
+          <table id="vm-table">
+            <caption class="sr">Virtual machines</caption>
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="check-all" aria-label="Select all visible VMs" /></th>
+                <th>Name</th><th>Series</th><th>Size</th><th>Region</th><th>Retires</th><th>Status</th><th>Target SKU</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-pre">
+        <h2 id="h-pre">2. Pre-check</h2>
+        <button id="btn-precheck" type="button" disabled>Run pre-check for selected</button>
+        <div id="precheck" aria-live="polite"></div>
+      </section>
+
+      <section aria-labelledby="h-mig">
+        <h2 id="h-mig">3. Migrate</h2>
+        <div class="row">
+          <button id="btn-dry" type="button" class="secondary" disabled>Dry run</button>
+          <button id="btn-migrate" type="button" class="danger" disabled>Migrate…</button>
+        </div>
+        <div id="progress" aria-live="polite"></div>
+      </section>
+
+      <section aria-labelledby="h-demo">
+        <h2 id="h-demo">Demo</h2>
+        <p>
+          A demo fleet of retiring-series VMs can be deployed with <code>demo\deploy.ps1</code> and
+          removed with <code>demo\cleanup.ps1</code>. The UI does not run these scripts; run them in a terminal, then press
+          “Auto-detect retiring VMs”.
+        </p>
+        <ul>
+          <li><a href="https://github.com/jgezelscorp/VmMigrator/tree/main/demo">Demo scripts &amp; fleet definition</a></li>
+          <li><a href="https://github.com/jgezelscorp/VmMigrator/blob/main/docs/architecture.md">Architecture &amp; demo notes</a></li>
+        </ul>
+      </section>
+    </main>
+
+    <dialog id="confirm" aria-labelledby="confirm-title">
+      <form method="dialog">
+        <h2 id="confirm-title">Confirm migration</h2>
+        <div id="confirm-body"></div>
+        <p class="warn-text"><strong>Downtime:</strong> each VM will be <strong>deallocated</strong> (stopped, compute billing ends, dynamic IPs may change), resized, and restarted. Expect several minutes of downtime per VM.</p>
+        <label><input type="checkbox" id="confirm-ack" /> I understand the downtime and deallocation impact.</label>
+        <div class="row end">
+          <button value="cancel" class="secondary" type="submit">Cancel</button>
+          <button id="confirm-go" value="ok" class="danger" type="submit" disabled>Start migration</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module">
+      import { init } from './app.js';
+      init(document, new URLSearchParams(location.search).get('mock') === '1');
+    </script>
   </body>
 </html>
