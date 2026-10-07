@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "series": [
+    {
+      "id": "Av1",
+      "retirementDate": "2024-08-31",
+      "pattern": "^(Basic_A\\d+|Standard_A\\d+)$",
+      "note": "Original Av1 already retired; date not re-confirmed."
+    },
+    {
+      "id": "DSv2-memory",
+      "retirementDate": "2028-05-01",
+      "pattern": "^Standard_DS?1[1-5]_v2(_Promo)?$",
+      "note": "Memory-optimized Dv2/DSv2 (14-112 GiB); mapped to E family."
+    },
+    {
+      "id": "Dv1",
+      "retirementDate": "2028-05-01",
+      "pattern": "^Standard_D\\d+$"
+    },
+    {
+      "id": "Dsv1",
+      "retirementDate": "2028-05-01",
+      "pattern": "^Standard_DS\\d+$"
+    },
+    {
+      "id": "Dv2",
+      "retirementDate": "2028-05-01",
+      "pattern": "^Standard_D\\d+_v2(_Promo)?$"
+    },
+    {
+      "id": "Dsv2",
+      "retirementDate": "2028-05-01",
+      "pattern": "^Standard_DS\\d+_v2(_Promo)?$"
+    },
+    {
+      "id": "Ls",
+      "retirementDate": "2028-05-01",
+      "pattern": "^Standard_L\\d+s$"
+    },
+    {
+      "id": "Amv2",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_A\\d+m_v2$"
+    },
+    {
+      "id": "Av2",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_A\\d+_v2$"
+    },
+    {
+      "id": "Bv1",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_B\\d+l?m?s$",
+      "note": "Burstable v1; different performance model."
+    },
+    {
+      "id": "Fv1",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_F\\d+$"
+    },
+    {
+      "id": "Fsv1",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_F\\d+s$"
+    },
+    {
+      "id": "Fsv2",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_F\\d+s_v2$"
+    },
+    {
+      "id": "Gv1",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_G\\d+$"
+    },
+    {
+      "id": "Gsv1",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_GS\\d+$"
+    },
+    {
+      "id": "Lsv2",
+      "retirementDate": "2028-11-15",
+      "pattern": "^Standard_L\\d+s_v2$"
+    },
+    {
+      "id": "Dv3",
+      "retirementDate": "2029-11-15",
+      "pattern": "^Standard_D\\d+_v3$",
+      "note": "Not applicable to Gov/21Vianet/sovereign clouds."
+    },
+    {
+      "id": "Dsv3",
+      "retirementDate": "2029-11-15",
+      "pattern": "^Standard_D\\d+s_v3$",
+      "note": "Not applicable to Gov/21Vianet/sovereign clouds."
+    },
+    {
+      "id": "Ev3",
+      "retirementDate": "2029-11-15",
+      "pattern": "^Standard_E\\d+(-\\d+)?_v3$",
+      "note": "Not applicable to Gov/21Vianet/sovereign clouds."
+    },
+    {
+      "id": "Esv3",
+      "retirementDate": "2029-11-15",
+      "pattern": "^Standard_E\\d+(-\\d+)?s_v3$",
+      "note": "Not applicable to Gov/21Vianet/sovereign clouds."
+    },
+    {
+      "id": "NVv3",
+      "retirementDate": "2026-09-30",
+      "pattern": "^Standard_NV\\d+s_v3$",
+      "note": "GPU series; flag only, no automatic mapping."
+    },
+    {
+      "id": "NVv4",
+      "retirementDate": "2026-09-30",
+      "pattern": "^Standard_NV\\d+as_v4$",
+      "note": "GPU series; flag only, no automatic mapping."
+    },
+    {
+      "id": "NP",
+      "retirementDate": "2027-05-31",
+      "pattern": "^Standard_NP\\d+s$",
+      "note": "FPGA series; flag only."
+    },
+    {
+      "id": "HC",
+      "retirementDate": "2027-05-31",
+      "pattern": "^Standard_HC\\d+rs$",
+      "note": "HPC series; flag only."
+    },
+    {
+      "id": "HBv2",
+      "retirementDate": "2027-05-31",
+      "pattern": "^Standard_HB\\d+.*_v2$",
+      "note": "HPC series; flag only."
+    },
+    {
+      "id": "M192-v2",
+      "retirementDate": "2027-03-31",
+      "pattern": "^Standard_M192i(d)?(m)?s_v2$",
+      "note": "Flag only."
+    }
+  ],
+  "source": "docs/research.md section 1 (Microsoft Learn retirements-and-capacity-restrictions, 2026-09-25)"
+}

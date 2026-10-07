@@ -1,0 +1,344 @@
+{
+  "version": 1,
+  "notes": "Templates use {vcpu}. Names are guidance; the Resource SKUs API is authoritative (prechecks verify). optional=true entries are safe fallbacks (v5) only offered for Gen1/non-NVMe workloads. Order within a generation = vendor preference (AMD first). tempDisk=true entries are the d sizes.",
+  "series": {
+    "Av1": "basic-av2",
+    "DSv2-memory": "memory-optimized",
+    "Dv1": "general-purpose",
+    "Dsv1": "general-purpose",
+    "Dv2": "general-purpose",
+    "Dsv2": "general-purpose",
+    "Ls": "storage-optimized",
+    "Amv2": "memory-optimized",
+    "Av2": "basic-av2",
+    "Bv1": "general-purpose",
+    "Fv1": "compute-optimized",
+    "Fsv1": "compute-optimized",
+    "Fsv2": "compute-optimized",
+    "Gv1": "memory-optimized",
+    "Gsv1": "memory-optimized",
+    "Lsv2": "storage-optimized",
+    "Dv3": "general-purpose",
+    "Dsv3": "general-purpose",
+    "Ev3": "memory-optimized",
+    "Esv3": "memory-optimized"
+  },
+  "groups": {
+    "general-purpose": [
+      {
+        "template": "Standard_D{vcpu}as_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}ads_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}s_v7",
+        "generation": 7,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}ds_v7",
+        "generation": 7,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}as_v6",
+        "generation": 6,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}ads_v6",
+        "generation": 6,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}s_v6",
+        "generation": 6,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}ds_v6",
+        "generation": 6,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}as_v5",
+        "generation": 5,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 4,
+        "optional": true
+      },
+      {
+        "template": "Standard_D{vcpu}ads_v5",
+        "generation": 5,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 4,
+        "optional": true
+      },
+      {
+        "template": "Standard_D{vcpu}s_v5",
+        "generation": 5,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 4,
+        "optional": true
+      },
+      {
+        "template": "Standard_D{vcpu}ds_v5",
+        "generation": 5,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 4,
+        "optional": true
+      }
+    ],
+    "memory-optimized": [
+      {
+        "template": "Standard_E{vcpu}as_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_E{vcpu}ads_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_E{vcpu}s_v7",
+        "generation": 7,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_E{vcpu}ds_v7",
+        "generation": 7,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_E{vcpu}as_v6",
+        "generation": 6,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_E{vcpu}ads_v6",
+        "generation": 6,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_E{vcpu}s_v6",
+        "generation": 6,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_E{vcpu}ds_v6",
+        "generation": 6,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_E{vcpu}as_v5",
+        "generation": 5,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 8,
+        "optional": true
+      },
+      {
+        "template": "Standard_E{vcpu}ads_v5",
+        "generation": 5,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 8,
+        "optional": true
+      },
+      {
+        "template": "Standard_E{vcpu}s_v5",
+        "generation": 5,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 8,
+        "optional": true
+      },
+      {
+        "template": "Standard_E{vcpu}ds_v5",
+        "generation": 5,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 8,
+        "optional": true
+      }
+    ],
+    "compute-optimized": [
+      {
+        "template": "Standard_F{vcpu}als_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_F{vcpu}alds_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_F{vcpu}as_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_F{vcpu}ads_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}als_v6",
+        "generation": 6,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_D{vcpu}alds_v6",
+        "generation": 6,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_D{vcpu}ls_v6",
+        "generation": 6,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_D{vcpu}lds_v6",
+        "generation": 6,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_D{vcpu}ls_v5",
+        "generation": 5,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 2,
+        "optional": true
+      },
+      {
+        "template": "Standard_D{vcpu}lds_v5",
+        "generation": 5,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 2,
+        "optional": true
+      }
+    ],
+    "basic-av2": [
+      {
+        "template": "Standard_D{vcpu}als_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_D{vcpu}ads_v7",
+        "generation": 7,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 4
+      },
+      {
+        "template": "Standard_D{vcpu}als_v6",
+        "generation": 6,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_D{vcpu}alds_v6",
+        "generation": 6,
+        "vendor": "AMD",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 2
+      },
+      {
+        "template": "Standard_D{vcpu}ls_v5",
+        "generation": 5,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 2,
+        "optional": true
+      },
+      {
+        "template": "Standard_D{vcpu}lds_v5",
+        "generation": 5,
+        "vendor": "Intel",
+        "tempDisk": true,
+        "memoryGbPerVcpu": 2,
+        "optional": true
+      }
+    ],
+    "storage-optimized": [
+      {
+        "template": "Standard_L{vcpu}as_v4",
+        "generation": 4,
+        "vendor": "AMD",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 8
+      },
+      {
+        "template": "Standard_L{vcpu}s_v3",
+        "generation": 3,
+        "vendor": "Intel",
+        "tempDisk": false,
+        "memoryGbPerVcpu": 8
+      }
+    ]
+  }
+}
