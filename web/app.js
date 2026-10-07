@@ -177,6 +177,7 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
         kids.push(h('p', {}, j.state === 'Restored' ? 'Rollback result: VM restored to original size.' : j.state === 'RollingBack' ? 'Rolling back…' : 'Migration failed.'));
       }
       if (j.state === 'Failed') kids.push(h('button', { type: 'button', class: 'danger', onclick: () => rollback(j.id) }, 'Rollback'));
+    else if (j.state === 'Done' && j.postCheck?.overall === 'FAIL') kids.push(h('button', { type: 'button', class: 'danger', onclick: () => rollback(j.id) }, 'Rollback (post-check failed)'));
       if (j.postCheck) {
         kids.push(h('h4', {}, 'Post-check ', badge(j.postCheck.overall)),
           h('ul', {}, j.postCheck.checks.map((c) => h('li', {}, badge(c.status), ` ${c.checkId}: ${c.message}`))));
