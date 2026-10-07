@@ -63,6 +63,5 @@ Extra migration switches: `-CleanupSnapshots`, `-GuestProbe`, `-PollSeconds`, `-
 
 ## Known limits
 
-- Live Azure validation has not been run yet (no resource-group rights in the demo subscription); all engine logic is
-  covered by offline tests against a stateful fake ARM, and `VMM_MOCK=1` lets you demo the UI end to end.
+- Live Azure validation was run on the demo fleet; see `docs/test-report.md` (Windows with a temp disk and Gen1 VMs fall back to v5 sizes; v6/v7 are not reachable in place).
 - If an automatic rollback cannot restore the VM, recreating it from the snapshots is manual (ids are in the job error).
