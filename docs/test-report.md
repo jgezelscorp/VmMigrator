@@ -38,9 +38,33 @@ Final state of all 8 VMs (checked independently with `az vm get-instance-view`):
 
 ## Limitations and workarounds
 
-1. **Windows + temp-disk source cannot reach v6/v7 in place.** Azure error: `OperationNotAllowed ... changing from resource disk to non-resource disk VM size and vice-versa is not allowed`. v6/v7 "d" sizes expose a local NVMe disk, not a resource disk (`MaxResourceVolumeMB=0`). In-place fallback: v5 with resource disk (Dadsv5/Ddsv5/Eadsv5). To reach v7: move the pagefile to C:, snapshot the OS disk and create a new VM from it on a v7 size (not automated).
-2. **Gen1 VMs cannot go to v6/v7 in place** (Gen2 only). The tool uses v5 (Gen1-capable). Long-term: Gen1 -> Trusted Launch/Gen2 upgrade or redeploy from a Gen2 image, then v7. Not implemented.
+1. **Windows + temp-disk source cannot reach v6/v7 in place.** Azure error: `OperationNotAllowed ... changing from resource disk to non-resource disk VM size and vice-versa is not allowed`. v6/v7 "d" sizes expose a local NVMe disk, not a resource disk (`MaxResourceVolumeMB=0`). In-place fallback: v5 with resource disk (Dadsv5/Ddsv5/Eadsv5). **Solved by the opt-in rebuild strategy (recreate), see "Rebuild strategy live results" below.**
+2. **Gen1 VMs cannot go to v6/v7 in place** (Gen2 only). In place the tool uses v5 (Gen1-capable). **Solved for Linux Marketplace images (Canonical/RedHat/SUSE) by the opt-in rebuild strategy (Trusted launch upgrade).** Windows Gen1 (needs MBR2GPT) is not automated.
 3. **Images without the NVMe tag** (`DiskControllerTypes` lacking NVMe) are warned or blocked by `nvme-image`; the workaround is an NVMe-capable image or a SCSI-capable target. The demo images are all NVMe-capable, so the BLOCK path was not hit live.
 4. v7 targets have no SCSI option in swedencentral (`DiskControllerTypes=NVMe` only), so Linux v7 migrations always change the controller.
 5. Temp-disk content, dynamic IPs and device names change; accelerated networking is not enabled by the tool.
 6. Automatic rollback after a real mid-flight Azure failure was not exercised live.
+
+## Rebuild strategy live results (issues #35, #36, #37)
+
+Run against `rg-vmmigrator-demo` (subscription 306af555-..., swedencentral) through the REST API of the PR #38 build, with
+`options {strategy:'rebuild', confirmRebuild:true, guestProbe:true}`. Verified independently with `az vm get-instance-view`
+and run-command probes.
+
+| VM | From -> to | Kind | Result |
+|---|---|---|---|
+| vmmig-win-dsv3-g2 | D2ads_v5 -> D2as_v7 | recreate | Done. Running, agent Ready (2.7.41491), NVMe controller, Gen2, same NIC and private IP 10.50.1.8, same tags, system-assigned identity present, extensions AzurePolicyforWindows and MDE.Windows restored. Guest: drives `C` only, NVMe disk, active pagefile `C:\pagefile.sys`, host name unchanged. |
+| vmmig-win-esv3-g2 | E2ads_v5 -> E2as_v7 | recreate | Done. Same checks as above, post-check PASS except the pre-existing accelerated-networking WARN. |
+| vmmig-lnx-dsv3-g1 | D2as_v5 (Gen1) -> D2as_v7 | gen1-upgrade | Done. Trusted launch PATCH then size/NVMe PATCH on the deallocated VM both succeeded; Gen2, UEFI, Secure Boot + vTPM, root on `/dev/nvme0n1p1`, agent Ready, same NIC/IP. |
+| vmmig-win-dsv3-g2 | rollback of the first rebuild | rollback | Restored. Rebuilt VM deleted, original VM recreated as D2ads_v5/SCSI on the original OS disk, same NIC/IP, extensions back, agent Ready. Then rebuilt again (with `cleanupSnapshots`), which removed the snapshot and the original disk. |
+
+What works: both Windows temp-disk VMs reach a v7 size; the Gen1 Linux VM reaches v7 through the supported Trusted launch upgrade
+(two consecutive PATCHes while deallocated were accepted, no recreate needed); rollback of a recreate job works live; the
+original disks are kept until cleanup.
+
+Observations and limits:
+- The pagefile script reported `?:\pagefile.sys` but after the reboot the registry value read `D:\pagefile.sys`; Windows used `C:\pagefile.sys` in practice (no D: drive on the new VM).
+- The Gen1 to Gen2 upgrade is not reversible in place. Rollback of that kind (recreate the Gen1 VM from the snapshots) is covered by the offline tests only; it was not exercised live because the demo Gen1 VM was kept on v7.
+- Not exercised live: data disks in a rebuild, availability sets/zones, Windows Gen1, Ubuntu variants other than 22.04.
+- A system-assigned identity gets a new principal id after a recreate (role assignments must be redone). Extensions with protected settings are not readable and cannot be restored.
+- Leftovers kept on purpose for rollback: snapshots `vmmig-lnx-dsv3-g1-os-vmm-d38a4f54`, `vmmig-win-dsv3-g2-os-vmm-c7a09f93`, `vmmig-win-esv3-g2-os-vmm-4f3abdfa` and the original OS disk of vmmig-win-esv3-g2. Delete them with `POST /api/migrations/:id/cleanup` after sign-off.

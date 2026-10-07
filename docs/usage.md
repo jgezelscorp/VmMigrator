@@ -27,6 +27,28 @@ Post-checks: provisioning, power, size, controller, VM agent heartbeat, extensio
 backup, and an optional run-command guest probe (`options.guestProbe`). A FAIL recommends rollback; set
 `options.autoRollbackOnPostCheckFail` to do it automatically.
 
+## Rebuild strategy (opt-in)
+
+In-place resize is impossible for (a) Windows VMs with a temp disk -> diskless v6/v7 sizes and (b) Gen1 VMs -> Gen2-only
+v7. When that is the case the pre-check still BLOCKs by default but offers `rebuildAvailable`/`rebuildKind`; with
+`strategy: 'rebuild'` (pre-check body `strategy`, migration `options.strategy`) those checks become WARN.
+
+- **recreate** (Windows temp disk): optional pagefile move to C: (run-command, `options.movePagefile=false` skips) ->
+  incremental snapshots -> deallocate -> new disks from the snapshots -> `deleteOption` flipped to Detach where it was Delete ->
+  VM definition deleted (NICs, IPs, disks kept) -> VM created again with the same name, NICs (same private IP), tags,
+  zone, availability set, identity, plan and extensions, `Attach` on the new disks, target size and `diskControllerType`.
+  The original disks are kept (rollback recreates the original VM from them); `cleanupSnapshots`/`/cleanup` deletes them after a successful job.
+- **gen1-upgrade** (Gen1 Linux with a Canonical/RedHat/SUSE image): the supported Trusted launch upgrade
+  (`securityProfile` PATCH on the deallocated VM) and then size + NVMe. Not reversible in place, so rollback recreates the
+  Gen1 VM from the snapshots. Windows Gen1 (needs MBR2GPT in the guest), Debian/Azure Linux, ADE, ephemeral/unmanaged OS
+  disks, VMSS and confidential VMs are not offered.
+- The real run needs `options.confirmRebuild=true` and snapshots (`skipSnapshots` is refused). The UI shows a
+  "Use rebuild strategy" checkbox on the pre-check card and a confirmation text about downtime and recreation;
+  PowerShell: `-Strategy Rebuild -ConfirmRebuild` (`-SkipPagefileMove`).
+- Steps: Validated, Prepared (Windows pagefile), SnapshotTaken, Deallocated, Rebuilt, Started, PostChecked, Done.
+- Caveats: a system-assigned identity gets a new principal id; extensions with protected settings cannot be read back and
+  Azure Disk Encryption is not restored (a warning is logged); the temp disk (D:) content is gone.
+
 ## REST API
 
 | Method + path | Body / query | Response |
@@ -43,9 +65,10 @@ backup, and an optional run-command guest probe (`options.guestProbe`). A FAIL r
 | `POST /api/migrations/:id/rollback` | `{reason?}` | job (`409` while running) |
 | `POST /api/migrations/:id/cleanup` | | job with snapshots deleted |
 
-`options`: `cleanupSnapshots`, `skipSnapshots`, `guestProbe`, `autoRollbackOnPostCheckFail` (booleans) and
+`options`: `cleanupSnapshots`, `skipSnapshots`, `guestProbe`, `autoRollbackOnPostCheckFail`, `confirmRebuild`, `movePagefile` (booleans),
+`strategy` (`inPlace` default, `rebuild`) and
 `maintenanceWindow {start,end}` (ISO). Errors are `{error, message}` with 400/401/404/409/502/500.
-Job states: `Queued, Validated, SnapshotTaken, Deallocated, Updated, Started, PostChecked, Done, RollingBack, Restored, Failed`.
+Job states: `Queued, Validated, Prepared, SnapshotTaken, Deallocated, Updated, Rebuilt, Started, PostChecked, Done, RollingBack, Restored, Failed`.
 
 ## PowerShell wrappers (`scripts/`)
 
@@ -63,5 +86,5 @@ Extra migration switches: `-CleanupSnapshots`, `-GuestProbe`, `-PollSeconds`, `-
 
 ## Known limits
 
-- Live Azure validation was run on the demo fleet; see `docs/test-report.md` (Windows with a temp disk and Gen1 VMs fall back to v5 sizes; v6/v7 are not reachable in place).
+- Live Azure validation was run on the demo fleet; see `docs/test-report.md`. In-place resize still cannot take Windows temp-disk VMs to v6/v7 or Gen1 VMs to v7; use the opt-in rebuild strategy above.
 - If an automatic rollback cannot restore the VM, recreating it from the snapshots is manual (ids are in the job error).
