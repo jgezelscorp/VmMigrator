@@ -1,0 +1,8 @@
+{
+  "universe_usage_history": [
+    { "universe": "descriptive", "assignment_id": "init-2026-10-07", "used_at": "2026-10-07T11:10:00+02:00" }
+  ],
+  "assignment_cast_snapshots": {
+    "init-2026-10-07": { "universe": "descriptive", "agents": ["lead","backend","frontend","infra","tester","scribe","ralph","rai","fact-checker"] }
+  }
+}
