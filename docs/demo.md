@@ -2,7 +2,22 @@
 
 Bicep that deploys a small fleet of cheap VMs on retiring series (Dsv3, DSv2, Ev3, Av2, Fsv2) so the migration engine has realistic inputs.
 
-> **Status: NOT YET DEPLOYED.** The authoring session had `az` and Azure MCP calls denied (no interactive approval), so quota/SKU research, `what-if` and the real deployment could not run. `main.bicep` compiles cleanly with `bicep build`. Run the commands below from an interactive, logged-in shell.
+> **Status: DEPLOYED** (2026-10-07) to subscription `ME-MngEnvMCAP578105-jangezels-1` (`306af555-a7da-440e-9b89-31b913b02384`), tenant `df965ea6-09d5-4066-9be6-da5094c98b6e`, region `swedencentral`, resource group `rg-vmmigrator-demo`. Quota was 0/100 in every family (Dsv3, Dv3, DSv2, Av2, Esv3, Fsv2, plus Dasv7/Easv7) with no SKU restrictions, so the full 8-VM fleet deployed first time (what-if: 19 resources). All 8 VMs are **Running**, deployed with `-NoAutoShutdown`. The admin password was generated and is not recorded here.
+
+Verified with `az vm list -g rg-vmmigrator-demo -d -o table`:
+
+| Name | Size | Region | OS | Gen | State |
+|---|---|---|---|---|---|
+| vmmig-lnx-dsv3-g2-data | Standard_D2s_v3 | swedencentral | Linux | 2 | running |
+| vmmig-win-dsv3-g2 | Standard_D2s_v3 | swedencentral | Windows | 2 | running |
+| vmmig-lnx-dsv3-g1 | Standard_D2s_v3 | swedencentral | Linux | 1 | running |
+| vmmig-lnx-dsv2-g2-avs1 | Standard_DS2_v2 | swedencentral | Linux | 2 | running |
+| vmmig-lnx-dsv2-g2-avs2 | Standard_DS2_v2 | swedencentral | Linux | 2 | running |
+| vmmig-win-esv3-g2 | Standard_E2s_v3 | swedencentral | Windows | 2 | running |
+| vmmig-lnx-av2-g1 | Standard_A2_v2 | swedencentral | Linux | 1 | running |
+| vmmig-lnx-fsv2-g2 | Standard_F2s_v2 | swedencentral | Linux | 2 | running |
+
+Scripts default to this subscription; override with `-Subscription`.
 
 ## Fleet (defaults in `demo/vms.default.json`, prefix `vmmig-`)
 
