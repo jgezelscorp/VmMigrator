@@ -52,6 +52,7 @@ npm run lint; npm run typecheck; npm test; npm run build
 
 | Doc | Content |
 |---|---|
+| [HowTo.md](HowTo.md) | Step-by-step guide to test-drive the solution from your own device |
 | [docs/runbook.md](docs/runbook.md) | Step-by-step migration runbook, in-place vs rebuild, downtime |
 | [docs/sku-mapping.md](docs/sku-mapping.md) | Source series to v7/v6/v5 target reference |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Known bugs, limitations, errors and workarounds |
