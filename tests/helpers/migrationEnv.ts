@@ -33,7 +33,7 @@ export function makeEnv(
     arm,
     store,
     getVm: (id) => getVm(arm, catalog, id),
-    preCheck: (vm, targetSku) => runPreChecks({ arm, skus, catalog }, vm, targetSku ? { targetSku } : {}),
+    preCheck: (vm, targetSku, o) => runPreChecks({ arm, skus, catalog }, vm, { ...(targetSku ? { targetSku } : {}), ...(o?.strategy ? { strategy: o.strategy } : {}) }),
     ...(opts.postCheck ? { postCheck: opts.postCheck } : {}),
     sleep: async () => undefined,
     pollIntervalMs: 1,

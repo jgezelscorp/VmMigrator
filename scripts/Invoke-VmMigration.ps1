@@ -7,6 +7,7 @@ reaches Done, Failed or Restored. The exit code is 0 for Done, 1 for Failed/Rest
 .EXAMPLE
 ./scripts/Invoke-VmMigration.ps1 -VmName vm1 -SubscriptionId <sub> -DryRun
 ./scripts/Invoke-VmMigration.ps1 -VmName vm1 -SubscriptionId <sub> -TargetSku Standard_D2s_v6 -Wait
+./scripts/Invoke-VmMigration.ps1 -VmName winvm -SubscriptionId <sub> -TargetSku Standard_D2as_v7 -Strategy Rebuild -ConfirmRebuild -Wait
 #>
 [CmdletBinding()]
 param(
@@ -18,6 +19,9 @@ param(
     [switch]$Wait,
     [switch]$CleanupSnapshots,
     [switch]$GuestProbe,
+    [ValidateSet('InPlace', 'Rebuild')][string]$Strategy = 'InPlace',
+    [switch]$ConfirmRebuild,
+    [switch]$SkipPagefileMove,
     [int]$PollSeconds = 5,
     [int]$TimeoutMinutes = 90,
     [string]$BaseUrl
@@ -33,6 +37,12 @@ if ($TargetSku) {
 $options = @{}
 if ($CleanupSnapshots) { $options.cleanupSnapshots = $true }
 if ($GuestProbe) { $options.guestProbe = $true }
+if ($Strategy -eq 'Rebuild') {
+    $options.strategy = 'rebuild'
+    if (-not $DryRun -and -not $ConfirmRebuild) { throw 'Rebuild deletes and recreates the VM with extended downtime. Add -ConfirmRebuild to proceed (or -DryRun to preview).' }
+    if ($ConfirmRebuild) { $options.confirmRebuild = $true }
+    if ($SkipPagefileMove) { $options.movePagefile = $false }
+}
 
 try {
     $jobs = (Invoke-VmmApi -BaseUrl $BaseUrl -Method POST -Path '/api/migrations' -Body @{

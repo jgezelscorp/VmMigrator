@@ -72,3 +72,50 @@ describe('web UI (mock mode)', () => {
     expect($('btn-migrate').disabled).toBe(true);
   });
 });
+
+describe('web UI rebuild opt-in', () => {
+  it('offers the rebuild checkbox, re-runs the pre-check with the strategy and sends the confirmation', async () => {
+    const html = readFileSync(resolve(webDir, 'index.html'), 'utf8');
+    document.body.innerHTML = /<body>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script[\s\S]*?<\/script>/, '');
+    const vm = { id: '/subscriptions/s/resourceGroups/r/providers/Microsoft.Compute/virtualMachines/win1', name: 'win1', vmSize: 'Standard_D2s_v3', location: 'westeurope', powerState: 'running', retiringSeries: 'Dsv3' };
+    const check = (status: string) => ({ checkId: 'temp-disk', status, message: 'temp disk' });
+    const prechecks: (string | undefined)[] = [];
+    const started: unknown[] = [];
+    const api = {
+      listSubscriptions: async () => [{ id: 's', name: 's' }],
+      listVms: async () => [vm],
+      precheck: async (ids: string[], _o: unknown, strategy?: string) => {
+        prechecks.push(strategy);
+        return ids.map((vmId) => ({ vmId, targetSku: 'Standard_D2as_v7', overall: strategy ? 'WARN' : 'BLOCK', rebuildAvailable: true, ...(strategy ? { strategy } : {}), checks: [check(strategy ? 'WARN' : 'BLOCK')] }));
+      },
+      startMigration: async (req: unknown) => { started.push(req); return []; },
+      getMigration: async () => { throw new Error('unused'); },
+      rollback: async () => { throw new Error('unused'); },
+    };
+    await init(document, false, { pollMs: 5, api });
+    $('btn-all').click();
+    await tick();
+    const cb = document.querySelector('#vm-table tbody input[type=checkbox]') as HTMLInputElement;
+    cb.checked = true;
+    cb.dispatchEvent(new Event('change'));
+    $('btn-precheck').click();
+    await tick();
+    expect($('btn-migrate').disabled).toBe(true);
+
+    const opt = document.querySelector('#precheck input[type=checkbox]') as HTMLInputElement;
+    opt.checked = true;
+    opt.dispatchEvent(new Event('change'));
+    await tick();
+    expect(prechecks).toEqual([undefined, 'rebuild']);
+    expect($('btn-migrate').disabled).toBe(false);
+
+    $('btn-migrate').click();
+    expect($('confirm-body').textContent).toContain('REBUILD');
+    $('confirm-ack').checked = true;
+    $('confirm-ack').dispatchEvent(new Event('change'));
+    $('confirm-go').click();
+    await tick();
+    expect(started).toHaveLength(1);
+    expect((started[0] as { options: unknown }).options).toEqual({ strategy: 'rebuild', confirmRebuild: true });
+  });
+});

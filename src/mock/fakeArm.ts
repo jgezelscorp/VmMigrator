@@ -40,6 +40,8 @@ export class FakeArm implements ArmClient {
   readonly calls: RecordedCall[] = [];
   readonly vms = new Map<string, Raw>();
   readonly snapshots = new Map<string, Raw>();
+  /** Managed disks that exist independently of a VM (created from snapshots, or left behind by a deleted VM) */
+  readonly disks = new Map<string, Raw>();
   readonly subscriptions: { subscriptionId: string; displayName: string }[];
   skus: Raw[];
   latencyMs: number;
@@ -108,6 +110,7 @@ export class FakeArm implements ArmClient {
 
     const snap = this.snapshots.get(norm(p));
     if (snap) return clone(snap) as T;
+    if (/\/providers\/Microsoft\.Compute\/disks\/[^/]+$/i.test(p)) return this.sendDisk<T>('GET', p, undefined);
 
     if (/\/availabilitySets\//i.test(p)) {
       const members = [...this.vms.values()].filter((v) => norm(v.properties?.availabilitySet?.id ?? '') === norm(p));
@@ -171,6 +174,20 @@ export class FakeArm implements ArmClient {
 
     if (method === 'POST' && /ResourceGraph\/resources$/i.test(p)) return { data: [] } as T;
 
+    if (/\/providers\/Microsoft\.Compute\/disks\/[^/]+$/i.test(p)) return this.sendDisk<T>(method, p, body as Raw);
+    if (/\/virtualMachines\/[^/]+$/i.test(p) && method === 'DELETE') return this.deleteVm<T>(p, vm);
+    if (/\/virtualMachines\/[^/]+$/i.test(p) && method === 'PUT') return this.createVm<T>(p, vm, body as Raw);
+    if (vm && method === 'PUT' && /\/virtualMachines\/[^/]+\/extensions\/[^/]+$/i.test(p)) {
+      const name = p.split('/').pop() as string;
+      const ext = { type: 'Microsoft.Compute/virtualMachines/extensions', name, properties: { ...(body as Raw)?.properties, provisioningState: 'Succeeded' } };
+      vm.resources = [...(vm.resources ?? []).filter((r: Raw) => r.name !== name), ext];
+      vm.properties.instanceView.extensions = [
+        ...(vm.properties.instanceView.extensions ?? []).filter((r: Raw) => r.name !== name),
+        { name, statuses: [{ code: 'ProvisioningState/succeeded' }] },
+      ];
+      return clone(ext) as T;
+    }
+
     if (vm) {
       const action = /\/virtualMachines\/[^/]+\/([^/]+)$/i.exec(p)?.[1]?.toLowerCase();
       if (method === 'POST' && action === 'deallocate') {
@@ -200,6 +217,122 @@ export class FakeArm implements ArmClient {
       }
     }
     throw new ArmError(`FakeArm: ${method} ${p} not supported`, 404, 'ResourceNotFound');
+  }
+
+  private diskRefs(vm: Raw): { id: string; name: string; role: 'os' | 'data'; deleteOption?: string }[] {
+    const sp = vm.properties?.storageProfile ?? {};
+    return [
+      ...(sp.osDisk?.managedDisk?.id ? [{ id: sp.osDisk.managedDisk.id, name: sp.osDisk.name, role: 'os' as const, deleteOption: sp.osDisk.deleteOption }] : []),
+      ...(sp.dataDisks ?? []).map((d: Raw) => ({ id: d.managedDisk.id, name: d.name, role: 'data' as const, deleteOption: d.deleteOption })),
+    ];
+  }
+
+  private attachedTo(diskId: string): Raw | undefined {
+    return [...this.vms.values()].find((v) => this.diskRefs(v).some((d) => norm(d.id) === norm(diskId)));
+  }
+
+  private diskOf(p: string): Raw | undefined {
+    const stored = this.disks.get(norm(p));
+    if (stored) return stored;
+    const owner = this.attachedTo(p);
+    if (!owner) return undefined;
+    const ref = this.diskRefs(owner).find((d) => norm(d.id) === norm(p));
+    const sp = owner.properties.storageProfile;
+    const raw = ref?.role === 'os' ? sp.osDisk : (sp.dataDisks ?? []).find((d: Raw) => norm(d.managedDisk.id) === norm(p));
+    return {
+      id: p,
+      name: p.split('/').pop(),
+      location: owner.location,
+      ...(owner.zones ? { zones: owner.zones } : {}),
+      sku: { name: raw?.managedDisk?.storageAccountType ?? 'Premium_LRS' },
+      properties: {
+        diskSizeGB: raw?.diskSizeGB ?? 64,
+        ...(ref?.role === 'os' ? { osType: sp.osDisk.osType, hyperVGeneration: owner.properties.instanceView?.hyperVGeneration ?? 'V2' } : {}),
+      },
+    };
+  }
+
+  private sendDisk<T>(method: string, p: string, body: Raw): T {
+    if (method === 'PUT') {
+      if (this.diskOf(p)) throw new ArmError(`Disk ${p.split('/').pop()} already exists`, 409, 'OperationNotAllowed');
+      const src = body?.properties?.creationData?.sourceResourceId as string | undefined;
+      const snap = src ? this.snapshots.get(norm(src)) : undefined;
+      if (body?.properties?.creationData?.createOption === 'Copy' && !snap) {
+        throw new ArmError(`Source snapshot ${src ?? ''} was not found`, 404, 'ResourceNotFound');
+      }
+      const disk = {
+        id: p,
+        name: p.split('/').pop(),
+        ...body,
+        properties: { diskSizeGB: snap?.properties?.diskSizeGB ?? 64, ...body?.properties, provisioningState: 'Succeeded', diskState: 'Unattached' },
+      };
+      this.disks.set(norm(p), disk);
+      return clone(disk) as T;
+    }
+    const disk = this.diskOf(p);
+    if (!disk) throw new ArmError(`Disk ${p.split('/').pop()} not found`, 404, 'ResourceNotFound');
+    if (method === 'DELETE') {
+      if (this.attachedTo(p)) throw new ArmError('Disk is attached to a virtual machine', 409, 'OperationNotAllowed');
+      this.disks.delete(norm(p));
+      return undefined as T;
+    }
+    return clone(disk) as T;
+  }
+
+  private deleteVm<T>(p: string, vm: Raw | undefined): T {
+    if (!vm) throw new ArmError('The virtual machine was not found', 404, 'ResourceNotFound');
+    const gen = vm.properties.instanceView?.hyperVGeneration ?? 'V2';
+    for (const ref of this.diskRefs(vm)) {
+      if (ref.deleteOption === 'Delete') continue;
+      const d = this.diskOf(ref.id);
+      if (d) this.disks.set(norm(ref.id), { ...d, properties: { ...d.properties, ...(ref.role === 'os' ? { hyperVGeneration: gen } : {}) } });
+    }
+    this.vms.delete(norm(vm.id));
+    return undefined as T;
+  }
+
+  private createVm<T>(p: string, existing: Raw | undefined, body: Raw): T {
+    if (existing) throw new ArmError('Updating a virtual machine with PUT is not supported by this fake', 409, 'OperationNotAllowed');
+    const props = body?.properties ?? {};
+    const size: string = props.hardwareProfile?.vmSize;
+    const sku = this.skus.find((s) => norm(s.name) === norm(size ?? ''));
+    if (!sku) throw new ArmError(`The requested VM size ${size} is not available in this region.`, 409, 'SkuNotAvailable');
+    const capOf = (n: string): string => (sku.capabilities ?? []).find((c: Raw) => c.name === n)?.value ?? '';
+    const ctl = props.storageProfile?.diskControllerType ?? 'SCSI';
+    if (!capOf('DiskControllerTypes').split(',').map((s: string) => s.trim()).includes(ctl)) {
+      throw new ArmError(`Size ${size} does not support disk controller ${ctl}`, 409, 'OperationNotAllowed');
+    }
+    const sp = props.storageProfile ?? {};
+    const attach = [sp.osDisk, ...(sp.dataDisks ?? [])].filter(Boolean);
+    let osGen = 'V2';
+    for (const d of attach) {
+      const id: string | undefined = d.managedDisk?.id;
+      const disk = id ? this.diskOf(id) : undefined;
+      if (d.createOption !== 'Attach' || !disk) throw new ArmError(`Disk ${id ?? d.name} was not found`, 404, 'ResourceNotFound');
+      if (this.attachedTo(id as string)) throw new ArmError(`Disk ${d.name} is already attached to a virtual machine`, 409, 'OperationNotAllowed');
+      if (d === sp.osDisk) osGen = disk.properties?.hyperVGeneration ?? 'V2';
+    }
+    if (props.securityProfile?.securityType === 'TrustedLaunch') osGen = 'V2';
+    if (osGen === 'V1' && !capOf('HyperVGenerations').includes('V1')) {
+      throw new ArmError(`Size ${size} only supports Generation 2 VMs`, 409, 'OperationNotAllowed');
+    }
+    if (osGen === 'V2' && !capOf('HyperVGenerations').includes('V2')) {
+      throw new ArmError(`Size ${size} only supports Generation 1 VMs`, 409, 'OperationNotAllowed');
+    }
+    const vm: Raw = {
+      ...clone(body),
+      id: p,
+      name: p.split('/').pop(),
+      resources: [],
+      properties: {
+        ...clone(props),
+        provisioningState: 'Succeeded',
+        instanceView: { hyperVGeneration: osGen, statuses: [], vmAgent: { vmAgentVersion: '2.12.0.2', statuses: [] }, extensions: [] },
+      },
+    };
+    this.vms.set(norm(p), vm);
+    this.setPower(vm, 'running');
+    return clone(vm) as T;
   }
 
   private setPower(vm: Raw, state: string): void {
@@ -236,13 +369,36 @@ export class FakeArm implements ArmClient {
     if (newCtl && newCtl !== (sp.diskControllerType ?? 'SCSI') && power !== 'deallocated') {
       throw new ArmError('Changing the disk controller type requires the VM to be deallocated.', 409, 'OperationNotAllowed');
     }
+    if (props.securityProfile) {
+      if (power !== 'deallocated') throw new ArmError('The VM must be deallocated to change the security profile.', 409, 'OperationNotAllowed');
+      vm.properties.securityProfile = { ...vm.properties.securityProfile, ...props.securityProfile };
+      if (props.securityProfile.securityType === 'TrustedLaunch') vm.properties.instanceView.hyperVGeneration = 'V2';
+    }
     if (newSize && newSize !== this.currentSize(vm)) {
-      if (!this.skus.some((s) => norm(s.name) === norm(newSize))) {
-        throw new ArmError(`The requested VM size ${newSize} is not available in this region.`, 409, 'SkuNotAvailable');
+      const target = this.skus.find((s) => norm(s.name) === norm(newSize));
+      if (!target) throw new ArmError(`The requested VM size ${newSize} is not available in this region.`, 409, 'SkuNotAvailable');
+      const cap = (s: Raw, n: string): string => (s?.capabilities ?? []).find((c: Raw) => c.name === n)?.value ?? '';
+      const current = this.skus.find((s) => norm(s.name) === norm(this.currentSize(vm)));
+      if (sp.osDisk?.osType === 'Windows' && Number(cap(current, 'MaxResourceVolumeMB')) > 0 && Number(cap(target, 'MaxResourceVolumeMB')) === 0) {
+        throw new ArmError('Cannot resize a Windows VM with a local temp disk to a size without one (OperationNotAllowed).', 409, 'OperationNotAllowed');
+      }
+      if (vm.properties.instanceView?.hyperVGeneration === 'V1' && !cap(target, 'HyperVGenerations').includes('V1')) {
+        throw new ArmError(`Size ${newSize} only supports Generation 2 VMs`, 409, 'OperationNotAllowed');
       }
       vm.properties.hardwareProfile.vmSize = newSize;
     }
     if (newCtl) sp.diskControllerType = newCtl;
+    const dd: Raw[] | undefined = props.storageProfile?.dataDisks;
+    if (props.storageProfile?.osDisk?.deleteOption && sp.osDisk) sp.osDisk.deleteOption = props.storageProfile.osDisk.deleteOption;
+    for (const d of dd ?? []) {
+      const t = (sp.dataDisks ?? []).find((x: Raw) => x.lun === d.lun);
+      if (t && d.deleteOption) t.deleteOption = d.deleteOption;
+    }
+    const nics: Raw[] | undefined = props.networkProfile?.networkInterfaces;
+    for (const n of nics ?? []) {
+      const t = (vm.properties.networkProfile.networkInterfaces ?? []).find((x: Raw) => norm(x.id) === norm(n.id));
+      if (t && n.properties?.deleteOption) t.properties = { ...t.properties, deleteOption: n.properties.deleteOption };
+    }
     if (body?.tags) vm.tags = { ...vm.tags, ...body.tags };
     return vm;
   }

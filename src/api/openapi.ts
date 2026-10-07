@@ -13,10 +13,10 @@ export const OPENAPI = {
         ],
       },
     },
-    '/api/vms/precheck': { post: { summary: 'Body { vmIds[], targetOverrides? } -> { results: PreCheckResult[] }' } },
+    '/api/vms/precheck': { post: { summary: 'Body { vmIds[], targetOverrides?, strategy?: inPlace or rebuild } -> { results: PreCheckResult[] }' } },
     '/api/migrations': {
       get: { summary: 'List jobs: { jobs }' },
-      post: { summary: 'Body { vmIds[], dryRun?, targetOverrides?, options? } -> 202 { jobs } (200 for dryRun); 409 when a pre-check BLOCKs' },
+      post: { summary: 'Body { vmIds[], dryRun?, targetOverrides?, options? { cleanupSnapshots, skipSnapshots, guestProbe, autoRollbackOnPostCheckFail, strategy: inPlace or rebuild, confirmRebuild (required for a real rebuild), movePagefile } } -> 202 { jobs } (200 for dryRun); 409 when a pre-check BLOCKs' },
     },
     '/api/migrations/{id}': { get: { summary: 'Job incl. plan, state, completedSteps, snapshots, events, postCheck, rollback' } },
     '/api/migrations/{id}/rollback': { post: { summary: 'Restore original size/controller; 409 while running or when nothing to roll back' } },

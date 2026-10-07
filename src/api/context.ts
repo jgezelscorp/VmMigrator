@@ -4,7 +4,7 @@ import { HttpArmClient, type ArmClient } from '../azure/arm.js';
 import { SkuService } from '../azure/skus.js';
 import { findDataDir, loadCatalog, type Catalog } from '../catalog/index.js';
 import { discoverVms, getVm } from '../discovery/discovery.js';
-import type { PreCheckResult, VmInfo } from '../domain/types.js';
+import type { MigrationStrategy, PreCheckResult, VmInfo } from '../domain/types.js';
 import { FileJobStore, MemoryJobStore, MigrationEngine, MigrationService, type JobStore } from '../migration/index.js';
 import { createDemoFakeArm } from '../mock/fleet.js';
 import { createPostCheckHook } from '../postchecks/index.js';
@@ -20,7 +20,7 @@ export interface AppContext {
   mock: boolean;
   getVm(vmId: string): Promise<VmInfo>;
   discover(opts: { subscriptionIds?: string[]; retiringOnly?: boolean }): Promise<VmInfo[]>;
-  preCheck(vm: VmInfo, targetSku?: string): Promise<PreCheckResult>;
+  preCheck(vm: VmInfo, targetSku?: string, opts?: { strategy?: MigrationStrategy }): Promise<PreCheckResult>;
 }
 
 export interface ContextOptions {
@@ -47,8 +47,8 @@ export function createContext(opts: ContextOptions = {}): AppContext {
   const store = opts.store ?? (mock ? new MemoryJobStore() : new FileJobStore(jobsDir));
 
   const getVmInfo = (id: string): Promise<VmInfo> => getVm(arm, catalog, id);
-  const preCheck = (vm: VmInfo, targetSku?: string): Promise<PreCheckResult> =>
-    runPreChecks({ arm, skus, catalog }, vm, targetSku ? { targetSku } : {});
+  const preCheck = (vm: VmInfo, targetSku?: string, o?: { strategy?: MigrationStrategy }): Promise<PreCheckResult> =>
+    runPreChecks({ arm, skus, catalog }, vm, { ...(targetSku ? { targetSku } : {}), ...(o?.strategy ? { strategy: o.strategy } : {}) });
   const engine = new MigrationEngine({
     arm,
     store,

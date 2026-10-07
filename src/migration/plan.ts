@@ -1,5 +1,6 @@
 import { COMPUTE_API } from '../discovery/discovery.js';
-import type { DiskControllerType, MigrationJobOptions, MigrationPlan, PlannedAction, PreCheckResult, VmInfo } from '../domain/types.js';
+import type { DiskControllerType, MigrationJobOptions, MigrationPlan, MigrationStrategy, PlannedAction, PreCheckResult, RebuildKind, VmInfo } from '../domain/types.js';
+import { diskPath, rebuildDiskName, trustedLaunchBody } from './rebuild.js';
 
 export const DISK_API = '2024-03-02';
 export const ARM_HOST = 'https://management.azure.com';
@@ -54,6 +55,53 @@ export function updateBody(targetSku: string, controller: DiskControllerType | u
   };
 }
 
+/** Rebuild only applies when an in-place resize is impossible; otherwise the gentler in-place strategy is used. */
+export function effectiveStrategy(options: MigrationJobOptions | undefined, preCheck: PreCheckResult): { strategy: MigrationStrategy; kind?: RebuildKind } {
+  return options?.strategy === 'rebuild' && preCheck.rebuildKind ? { strategy: 'rebuild', kind: preCheck.rebuildKind } : { strategy: 'inPlace' };
+}
+
+/** ARM operations of the Rebuilt step. */
+function rebuildActions(vm: VmInfo, preCheck: PreCheckResult, jobId: string, kind: RebuildKind, controller: DiskControllerType): PlannedAction[] {
+  const vmUrl = `${ARM_HOST}${vm.id}`;
+  if (kind === 'gen1-upgrade') {
+    return [
+      {
+        step: 'Rebuilt',
+        description: 'Upgrade the deallocated Gen1 VM to Trusted launch (Gen2); not reversible in place, rollback recreates the Gen1 VM from the snapshots',
+        method: 'PATCH',
+        url: `${vmUrl}?api-version=${COMPUTE_API}`,
+        body: trustedLaunchBody,
+      },
+      {
+        step: 'Rebuilt',
+        description: `Set vmSize=${preCheck.targetSku} and diskControllerType=${controller}`,
+        method: 'PATCH',
+        url: `${vmUrl}?api-version=${COMPUTE_API}`,
+        body: updateBody(preCheck.targetSku, controller, vm.diskControllerType),
+      },
+    ];
+  }
+  const diskUrl = (n: string): string => `${ARM_HOST}${diskPath(vm.subscriptionId, vm.resourceGroup, n)}?api-version=${DISK_API}`;
+  const disks = [vm.osDisk, ...(vm.dataDisks ?? [])].filter((d) => d?.id);
+  return [
+    ...disks.map((d) => ({
+      step: 'Rebuilt' as const,
+      description: `Create disk ${rebuildDiskName(d?.name ?? '', jobId)} from the snapshot of ${d?.name}`,
+      method: 'PUT' as const,
+      url: diskUrl(rebuildDiskName(d?.name ?? '', jobId)),
+    })),
+    { step: 'Rebuilt', description: 'Set deleteOption=Detach on disks and NICs when they are set to Delete (only then)', method: 'PATCH', url: `${vmUrl}?api-version=${COMPUTE_API}` },
+    { step: 'Rebuilt', description: `Delete the VM definition of ${vm.name} (disks, NICs, IPs, availability set stay)`, method: 'DELETE', url: `${vmUrl}?api-version=${COMPUTE_API}` },
+    {
+      step: 'Rebuilt',
+      description: `Create ${vm.name} again as ${preCheck.targetSku} (diskControllerType=${controller}) on the new disks, same NICs, tags, zone, availability set and identity`,
+      method: 'PUT',
+      url: `${vmUrl}?api-version=${COMPUTE_API}`,
+    },
+    { step: 'Rebuilt', description: 'Recreate the VM extensions (extensions with protected settings must be reinstalled manually)', method: 'PUT', url: `${vmUrl}/extensions/<name>?api-version=${COMPUTE_API}` },
+  ];
+}
+
 export interface PlanInput {
   vm: VmInfo;
   preCheck: PreCheckResult;
@@ -66,6 +114,7 @@ export interface PlanInput {
 export function buildPlan({ vm, preCheck, jobId, dryRun, options = {} }: PlanInput): MigrationPlan {
   const current: DiskControllerType = vm.diskControllerType ?? 'SCSI';
   const controller = preCheck.targetDiskController ?? current;
+  const { strategy, kind } = effectiveStrategy(options, preCheck);
   const vmUrl = `${ARM_HOST}${vm.id}`;
   const actions: PlannedAction[] = [
     {
@@ -75,6 +124,16 @@ export function buildPlan({ vm, preCheck, jobId, dryRun, options = {} }: PlanInp
       url: `${vmUrl}?api-version=${COMPUTE_API}&$expand=instanceView`,
     },
   ];
+
+  if (strategy === 'rebuild' && kind === 'recreate' && vm.osType === 'Windows' && options.movePagefile !== false && vm.powerState === 'running') {
+    actions.push({
+      step: 'Prepared',
+      description: 'Move the pagefile from the temp disk (D:) to C: with run-command (best effort; Windows also recreates it on C: when D: is missing)',
+      method: 'POST',
+      url: `${vmUrl}/runCommand?api-version=${COMPUTE_API}`,
+      body: { commandId: 'RunPowerShellScript', script: '(pagefile script)' },
+    });
+  }
 
   if (!options.skipSnapshots) {
     for (const t of snapshotTargets(vm, jobId)) {
@@ -95,17 +154,20 @@ export function buildPlan({ vm, preCheck, jobId, dryRun, options = {} }: PlanInp
     ...(needsDealloc ? { method: 'POST' as const, url: `${vmUrl}/deallocate?api-version=${COMPUTE_API}` } : {}),
   });
 
-  actions.push({
-    step: 'Updated',
-    description:
-      controller !== current
-        ? `Set vmSize=${preCheck.targetSku} and diskControllerType=${controller} in one update`
-        : `Set vmSize=${preCheck.targetSku} (disk controller stays ${current})`,
-    method: 'PATCH',
-    url: `${vmUrl}?api-version=${COMPUTE_API}`,
-    body: updateBody(preCheck.targetSku, controller, current),
-  });
-
+  if (strategy === 'rebuild' && kind) {
+    actions.push(...rebuildActions(vm, preCheck, jobId, kind, controller));
+  } else {
+    actions.push({
+      step: 'Updated',
+      description:
+        controller !== current
+          ? `Set vmSize=${preCheck.targetSku} and diskControllerType=${controller} in one update`
+          : `Set vmSize=${preCheck.targetSku} (disk controller stays ${current})`,
+      method: 'PATCH',
+      url: `${vmUrl}?api-version=${COMPUTE_API}`,
+      body: updateBody(preCheck.targetSku, controller, current),
+    });
+  }
   const shouldRun = vm.powerState !== 'deallocated' && vm.powerState !== 'stopped';
   actions.push(
     {
@@ -137,6 +199,8 @@ export function buildPlan({ vm, preCheck, jobId, dryRun, options = {} }: PlanInp
     targetSku: preCheck.targetSku,
     sourceDiskController: current,
     targetDiskController: controller,
+    strategy,
+    ...(kind ? { rebuildKind: kind } : {}),
     dryRun,
     actions,
     preCheck,
