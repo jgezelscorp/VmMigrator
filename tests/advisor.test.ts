@@ -70,6 +70,27 @@ describe('advisor', () => {
     expect((await p.reservationHourly('r', 's', 'Linux')).oneYear).toBeCloseTo(876 / 8760, 6);
   });
 
+  it('falls back to a 2-vCPU target for 1-vCPU VMs and explains why', async () => {
+    const mk = (name: string, vcpus: number, family: string) => ({
+      name, family, vcpus, memoryGb: vcpus * 4, maxResourceVolumeMB: 0, generations: ['V1', 'V2'], diskControllers: ['SCSI', 'NVMe'],
+      acceleratedNetworking: true, premiumIO: true, zones: [], restrictions: [],
+    });
+    const all = [mk('Standard_DS1_v2', 1, 'standardDSv2Family'), ...['Standard_D2s_v6', 'Standard_D2ds_v6', 'Standard_D2s_v7', 'Standard_D2ds_v7'].map((n) => mk(n, 2, 'standardDsv6Family'))];
+    const skus = { getSkus: async () => all, getUsages: async () => undefined };
+    const arm = { list: async () => [] };
+    const prices = { hourlyPrice: async () => undefined, reservationHourly: async () => ({}) };
+    const vm = {
+      id: '/subscriptions/s/resourceGroups/r/providers/Microsoft.Compute/virtualMachines/v', name: 'v', subscriptionId: 's', location: 'northeurope',
+      vmSize: 'Standard_DS1_v2', retiringSeries: 'Dsv2', osType: 'Linux', hyperVGeneration: 'V2', diskControllerType: 'SCSI', zones: [],
+    };
+    const { SkuAdvisor } = await import('../src/advisor/index.js');
+    const { loadCatalog } = await import('../src/catalog/index.js');
+    const advisor = new SkuAdvisor({ arm, skus, catalog: loadCatalog(), prices } as never);
+    const [adv] = await advisor.advise([vm as never]);
+    expect(adv?.proposed?.vcpus).toBe(2);
+    expect(adv?.notes.join(' ')).toContain('2-vCPU');
+  });
+
   it('returns undefined when the price API fails', async () => {
     const bad = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
     expect(await new RetailPriceProvider(bad).hourlyPrice('x', 'y', 'Linux')).toBeUndefined();

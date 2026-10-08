@@ -329,10 +329,10 @@ export class SkuAdvisor {
     }
   }
 
-  private candidateNames(vm: VmInfo, source: SkuInfo | undefined): string[] {
+  private candidateNames(vm: VmInfo, source: SkuInfo | undefined, vcpuOverride?: number): string[] {
     const optional = vm.hyperVGeneration === 'V1' || (vm.osType === 'Windows' && (source?.maxResourceVolumeMB ?? 0) > 0);
     if (vm.retiringSeries) {
-      const vcpu = source?.vcpus || parseVcpuFromSize(vm.vmSize);
+      const vcpu = vcpuOverride ?? (source?.vcpus || parseVcpuFromSize(vm.vmSize));
       const built = buildCandidateTargets(this.deps.catalog, vm.retiringSeries, {
         ...(vcpu ? { vcpu } : {}),
         ...(source?.memoryGb ? { memoryGb: source.memoryGb } : {}),
@@ -352,7 +352,16 @@ export class SkuAdvisor {
     ]);
     const find = (n: string): SkuInfo | undefined => all.find((s) => s.name.toLowerCase() === n.toLowerCase());
     const source = find(vm.vmSize);
-    const names = this.candidateNames(vm, source);
+    let names = this.candidateNames(vm, source);
+    // v6/v7 have no 1-vCPU sizes; fall back to the 2-vCPU equivalents.
+    let bumped = false;
+    if (names.length && !names.some(find) && (source?.vcpus || parseVcpuFromSize(vm.vmSize)) === 1) {
+      const up = this.candidateNames(vm, source, 2);
+      if (up.some(find)) {
+        names = up;
+        bumped = true;
+      }
+    }
     const gen = vm.hyperVGeneration ?? 'V1';
     const ctrl = vm.diskControllerType ?? 'SCSI';
 
@@ -378,6 +387,7 @@ export class SkuAdvisor {
     const notes: string[] = [];
     if (!names.length) notes.push('No migration targets are defined for this size (it is not in a retiring series).');
     else if (!chosen) notes.push(`None of the candidate targets (${names.slice(0, 8).join(', ')}) exist in ${vm.location} for this subscription.`);
+    if (bumped && chosen) notes.push('No 1-vCPU size exists in the v6/v7 series; proposing the 2-vCPU equivalent.');
     if (chosen?.compatNote) notes.push(chosen.compatNote);
     if (chosen && !clean(chosen)) notes.push('No candidate passed every check; the best-effort proposal has open issues.');
 
