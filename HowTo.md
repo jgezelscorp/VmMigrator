@@ -99,7 +99,7 @@ Open <http://127.0.0.1:3000/>. If you see `401 NotLoggedIn`, run `az login` agai
 
 ### 3.5 Migrate through the web UI
 
-1. Choose your subscription. Use **Auto-detect** (retiring VMs only) or select VMs manually.
+1. Choose your subscription(s): Ctrl/Shift-click several in the list, use **Select all**, or paste comma-separated ids. With none selected, all subscriptions are scanned. Use **Auto-detect** (retiring VMs only) or select VMs manually.
    At any time, **Download HTML report** saves a standalone report of the discovered estate (KPIs, per-VM details,
    pre-check results and migration jobs) as `vm-migrator-report-<date>.html`.
 2. Click **Pre-check** and read the results:

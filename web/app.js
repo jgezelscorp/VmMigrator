@@ -30,7 +30,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
   const state = { vms: [], selected: new Set(), targets: {}, prechecks: {}, polling: new Map(), jobs: new Map(), rebuild: new Set(), advice: {} };
 
   const showError = (e) => { $('error').hidden = !e; $('error').textContent = e ? (e.message ?? String(e)) : ''; };
-  const subId = () => $('sub-text').value.trim() || $('sub').value;
+  const subId = () => $('sub-text').value.trim() || [...$('sub').selectedOptions].map((o) => o.value).join(',');
 
   // Shows a spinner on the button(s), an indeterminate bar and the global bar while fn runs.
   const busyBtns = new Set();
@@ -325,6 +325,8 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
   $('btn-precheck').onclick = runPrecheck;
   $('btn-dry').onclick = () => startMigration(true);
   $('btn-migrate').onclick = () => startMigration(false);
+
+  $('btn-sub-all').onclick = () => { for (const o of $('sub').options) o.selected = true; };
 
   return client.listSubscriptions().then((subs) => {
     $('sub').replaceChildren(...subs.map((s) => h('option', { value: s.id ?? s.subscriptionId }, s.name ?? s.displayName ?? s.id)));

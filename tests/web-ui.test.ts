@@ -174,3 +174,28 @@ describe('web UI rebuild opt-in', () => {
     click.mockRestore();
   });
 });
+describe('web UI multi-subscription', () => {
+  it('sends all selected subscriptions comma-separated and supports select all', async () => {
+    const html = readFileSync(resolve(webDir, 'index.html'), 'utf8');
+    document.body.innerHTML = /<body>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script[\s\S]*?<\/script>/, '');
+    const seen: (string | undefined)[] = [];
+    const api = {
+      listSubscriptions: async () => [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }],
+      listVms: async (q: { subscriptionId?: string }) => { seen.push(q.subscriptionId); return []; },
+      precheck: async () => [], startMigration: async () => [],
+      getMigration: async () => { throw new Error('unused'); }, rollback: async () => { throw new Error('unused'); },
+    };
+    await init(document, { pollMs: 5, api });
+    const sel = document.getElementById('sub') as HTMLSelectElement;
+    expect(sel.multiple).toBe(true);
+    (sel.options[0] as HTMLOptionElement).selected = true;
+    (sel.options[2] as HTMLOptionElement).selected = true;
+    $('btn-detect').click();
+    await tick();
+    expect(seen.at(-1)).toBe('a,c');
+    $('btn-sub-all').click();
+    $('btn-detect').click();
+    await tick();
+    expect(seen.at(-1)).toBe('a,b,c');
+  });
+});
