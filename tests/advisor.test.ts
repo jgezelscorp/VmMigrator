@@ -20,6 +20,10 @@ describe('advisor', () => {
     expect(priceUplift('Standard_D2_v2', 'westeurope')).toEqual({ pct: 25, kind: 'lifecycle' });
     expect(priceUplift('Standard_D2s_v5', 'westeurope')).toEqual({ pct: 9, kind: 'regional' });
     expect(priceUplift('Standard_D2s_v5', 'swedencentral')).toEqual({ pct: 0, kind: 'none' });
+    for (const s of ['Standard_D4s_v7', 'Standard_D4ds_v7', 'Standard_D4ls_v7', 'Standard_D4lds_v7', 'Standard_E8s_v7', 'Standard_E8ds_v7', 'Standard_E16-8ds_v7']) {
+      expect(priceUplift(s, 'westeurope')).toEqual({ pct: 0, kind: 'none' });
+    }
+    expect(priceUplift('Standard_D4as_v7', 'westeurope')).toEqual({ pct: 9, kind: 'regional' });
   });
 
   it('announced regional uplifts are present', () => {
