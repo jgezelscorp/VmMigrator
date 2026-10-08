@@ -134,10 +134,13 @@ export function detachBody(def: Raw): Raw | undefined {
   };
 }
 
+/** One-shot password/SSH reset extensions: their protected settings are unreadable, so recreating them fails. */
+const VMACCESS_TYPES = /^(VMAccessAgent|VMAccessForLinux)$/i;
+
 /** Extension resources that can be recreated (ADE cannot, and protected settings are never readable). */
 export function extensionBodies(extensions: Raw[], location: string): { name: string; body: Raw }[] {
   return extensions
-    .filter((e) => e?.name && e.properties?.type && !ADE_EXTENSION_TYPES.test(e.properties.type))
+    .filter((e) => e?.name && e.properties?.type && !ADE_EXTENSION_TYPES.test(e.properties.type) && !VMACCESS_TYPES.test(e.properties.type))
     .map((e) => {
       const p = e.properties;
       return {
