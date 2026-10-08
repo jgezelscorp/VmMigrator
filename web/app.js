@@ -30,7 +30,13 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
   const state = { vms: [], selected: new Set(), targets: {}, prechecks: {}, polling: new Map(), jobs: new Map(), rebuild: new Set(), advice: {} };
 
   const showError = (e) => { $('error').hidden = !e; $('error').textContent = e ? (e.message ?? String(e)) : ''; };
-  const subId = () => $('sub-text').value.trim() || [...$('sub').selectedOptions].map((o) => o.value).join(',');
+  const subBoxes = () => [...$('sub-list').querySelectorAll('input[type=checkbox]')];
+  const subSelected = () => subBoxes().filter((c) => c.checked).map((c) => c.value);
+  const updateSubSummary = () => {
+    const n = subSelected().length;
+    $('sub-summary').textContent = n === 0 ? 'All subscriptions' : `${n} of ${subBoxes().length} selected`;
+  };
+  const subId = () => $('sub-text').value.trim() || subSelected().join(',');
 
   // Shows a spinner on the button(s), an indeterminate bar and the global bar while fn runs.
   const busyBtns = new Set();
@@ -326,10 +332,24 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
   $('btn-dry').onclick = () => startMigration(true);
   $('btn-migrate').onclick = () => startMigration(false);
 
-  $('btn-sub-all').onclick = () => { for (const o of $('sub').options) o.selected = true; };
+  $('btn-sub-all').onclick = () => {
+    for (const c of subBoxes()) if (!c.closest('label').hidden) c.checked = true;
+    updateSubSummary();
+  };
+  $('btn-sub-none').onclick = () => { for (const c of subBoxes()) c.checked = false; updateSubSummary(); };
+  $('sub-filter').oninput = () => {
+    const q = $('sub-filter').value.trim().toLowerCase();
+    for (const c of subBoxes()) { const l = c.closest('label'); l.hidden = !!q && !l.textContent.toLowerCase().includes(q); }
+  };
 
   return client.listSubscriptions().then((subs) => {
-    $('sub').replaceChildren(...subs.map((s) => h('option', { value: s.id ?? s.subscriptionId }, s.name ?? s.displayName ?? s.id)));
+    $('sub-list').replaceChildren(...subs.map((s) => {
+      const id = s.id ?? s.subscriptionId;
+      const cb = h('input', { type: 'checkbox', value: id });
+      cb.onchange = updateSubSummary;
+      return h('label', { title: id }, cb, s.name ?? s.displayName ?? id);
+    }));
+    updateSubSummary();
     renderTable();
     return { state, load, runPrecheck, startMigration, downloadReport, autoSku };
   });

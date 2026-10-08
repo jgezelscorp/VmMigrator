@@ -30,7 +30,13 @@ button { position:relative; padding:7px 16px; border:0; background:var(--grad); 
 button:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 8px 18px #5b5bff66; filter:brightness(1.07); }
 button:active:not(:disabled) { transform:translateY(0); }
 button.secondary { background:#fff; color:var(--accent); border:1px solid var(--accent); box-shadow:none; }
-select[multiple] { min-width:280px; height:auto; padding:4px; }
+.dropdown { position:relative; display:inline-block; min-width:280px; }
+.dropdown > summary { cursor:pointer; padding:6px 10px; border:1px solid #888; border-radius:6px; background:#fff; color:#111; list-style:none; }
+.dropdown-panel { position:absolute; z-index:20; top:100%; left:0; min-width:100%; width:360px; max-width:90vw; padding:8px; margin-top:4px; border:1px solid #888; border-radius:6px; background:#fff; color:#111; box-shadow:0 6px 18px rgba(0,0,0,.25); }
+.dropdown-panel input[type=text] { width:100%; box-sizing:border-box; margin-bottom:6px; }
+.dropdown-actions { display:flex; gap:6px; margin-bottom:6px; }
+.dropdown-list { max-height:260px; overflow:auto; }
+.dropdown-list label { display:flex; gap:6px; align-items:center; padding:2px 0; cursor:pointer; }
 button.danger { background:linear-gradient(135deg,#ff5f6d,#d93025); box-shadow:0 4px 12px #d9302555; }
 button:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
 button.busy { cursor:progress; opacity:.9; padding-left:38px; }

@@ -186,10 +186,12 @@ describe('web UI multi-subscription', () => {
       getMigration: async () => { throw new Error('unused'); }, rollback: async () => { throw new Error('unused'); },
     };
     await init(document, { pollMs: 5, api });
-    const sel = document.getElementById('sub') as HTMLSelectElement;
-    expect(sel.multiple).toBe(true);
-    (sel.options[0] as HTMLOptionElement).selected = true;
-    (sel.options[2] as HTMLOptionElement).selected = true;
+    const boxes = [...document.querySelectorAll('#sub-list input[type=checkbox]')] as HTMLInputElement[];
+    expect(boxes).toHaveLength(3);
+    expect($('sub-summary').textContent).toBe('All subscriptions');
+    boxes[0]!.checked = true; boxes[0]!.dispatchEvent(new Event('change'));
+    boxes[2]!.checked = true; boxes[2]!.dispatchEvent(new Event('change'));
+    expect($('sub-summary').textContent).toBe('2 of 3 selected');
     $('btn-detect').click();
     await tick();
     expect(seen.at(-1)).toBe('a,c');
@@ -197,5 +199,12 @@ describe('web UI multi-subscription', () => {
     $('btn-detect').click();
     await tick();
     expect(seen.at(-1)).toBe('a,b,c');
+    ($('sub-filter') as HTMLInputElement).value = 'B';
+    $('sub-filter').dispatchEvent(new Event('input'));
+    $('btn-sub-none').click();
+    $('btn-sub-all').click();
+    $('btn-detect').click();
+    await tick();
+    expect(seen.at(-1)).toBe('b');
   });
 });
