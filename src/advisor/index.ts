@@ -145,6 +145,7 @@ export interface SkuAdvice {
     proposedUpliftKind: UpliftKind;
     currentRegionalImpact?: string;
     proposedRegionalImpact?: string;
+    currentMonthlyWithUplift?: number;
     proposedMonthlyWithUplift?: number;
     deltaPctWithUplift?: number;
     message: string;
