@@ -96,7 +96,7 @@ export function recreateVmBody({ definition: def, vmSize, controller, os, data }
         managedDisk: { id: a?.id ?? d.managedDisk?.id },
       };
     }),
-    diskControllerType: controller,
+    ...(controller === 'NVMe' ? { diskControllerType: controller } : {}),
   };
   props.hardwareProfile = { ...(props.hardwareProfile ?? {}), vmSize };
   const identity = def.identity
