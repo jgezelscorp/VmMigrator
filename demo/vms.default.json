@@ -1,10 +1,8 @@
 [
-  { "name": "lnx-dsv3-g2-data", "size": "Standard_D2s_v3", "os": "linux", "gen": 2, "dataDisk": true, "avset": false },
-  { "name": "win-dsv3-g2", "size": "Standard_D2s_v3", "os": "windows", "gen": 2, "dataDisk": false, "avset": false },
-  { "name": "lnx-dsv3-g1", "size": "Standard_D2s_v3", "os": "linux", "gen": 1, "dataDisk": false, "avset": false },
-  { "name": "lnx-dsv2-g2-avs1", "size": "Standard_DS2_v2", "os": "linux", "gen": 2, "dataDisk": false, "avset": true },
-  { "name": "lnx-dsv2-g2-avs2", "size": "Standard_DS2_v2", "os": "linux", "gen": 2, "dataDisk": false, "avset": true },
-  { "name": "win-esv3-g2", "size": "Standard_E2s_v3", "os": "windows", "gen": 2, "dataDisk": false, "avset": false },
-  { "name": "lnx-av2-g1", "size": "Standard_A2_v2", "os": "linux", "gen": 1, "dataDisk": false, "avset": false },
-  { "name": "lnx-fsv2-g2", "size": "Standard_F2s_v2", "os": "linux", "gen": 2, "dataDisk": false, "avset": false }
+  { "name": "lnx-v1-ubuntu1604-g1", "size": "Standard_F2s", "os": "linux", "image": "ubuntu1604", "gen": 1, "security": "Standard", "dataDisk": false, "avset": false },
+  { "name": "lnx-v2-ubuntu1804-g2", "size": "Standard_DS2_v2", "os": "linux", "image": "ubuntu1804", "gen": 2, "security": "Standard", "dataDisk": false, "avset": false },
+  { "name": "lnx-v3-ubuntu2004-tl", "size": "Standard_D2s_v3", "os": "linux", "image": "ubuntu2004", "gen": 2, "security": "TrustedLaunch", "dataDisk": false, "avset": false },
+  { "name": "win-v1-ws2016-g1", "size": "Standard_F2s", "os": "windows", "image": "ws2016", "gen": 1, "security": "Standard", "dataDisk": false, "avset": false },
+  { "name": "win-v2-ws2019-g2", "size": "Standard_DS2_v2", "os": "windows", "image": "ws2019", "gen": 2, "security": "Standard", "dataDisk": false, "avset": false },
+  { "name": "win-v3-ws2022-tl", "size": "Standard_D2s_v3", "os": "windows", "image": "ws2022", "gen": 2, "security": "TrustedLaunch", "dataDisk": false, "avset": false }
 ]
