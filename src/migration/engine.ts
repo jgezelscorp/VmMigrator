@@ -523,6 +523,7 @@ export class MigrationEngine {
       if (orig.rebuild && (orig.rebuild.vmDeleted || orig.rebuild.upgradeStarted)) {
         await this.rollbackRebuild(job, orig.rebuild);
         job.state = 'Restored';
+        delete job.error;
         job.rollback = { reason, at: this.now().toISOString(), trigger, succeeded: true };
         this.event(job, 'info', 'Rollback', 'Rollback complete');
         this.save(job);
