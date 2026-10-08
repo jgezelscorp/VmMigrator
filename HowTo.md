@@ -86,8 +86,10 @@ The **target** v7 family also needs quota (for example Dasv7/Dsv7 for the D-seri
 .\demo\deploy.ps1 -Location swedencentral -NoAutoShutdown   # real deploy, about 10-15 min
 ```
 
-- A random admin password is generated and **printed once**. Save it if you want to log in to a VM, or set
-  `$env:VMMIG_ADMIN_PASSWORD` beforehand.
+- Credentials: pass `-AdminUser <name>` (default `demoadmin`) and `-AdminPassword <pw>`. Precedence for the password is
+  `-AdminPassword`, then `$env:VMMIG_ADMIN_PASSWORD`, then a generated one. At the end of the deploy a **Logon information**
+  block prints the user, password, how to connect (Bastion) and the VM list. A generated password is shown only there.
+  Changing `-AdminUser` on an existing deployment is not possible; run `rebuild.ps1` first.
 - Use `-Series Dsv3,DS2_v2` for a subset, and `-Subscription <id>` / `-ResourceGroup <name>` to override the defaults
   (`rg-vmmigrator-demo`).
 - Add `-OperatorIp <your-cidr>` to allow SSH/RDP from your address to the VNet. VMs have **no public IPs**; connect via the **Azure Bastion** (Basic) that `deploy.ps1` creates: Azure portal > VM > Connect > Bastion, user `demoadmin`. Skip it with `-NoBastion`; create/remove it separately with `.\demo\bastion.ps1` / `.\demo\bastion.ps1 -Remove` (Bastion bills hourly, roughly €0.15-0.20/h; cleanup removes it).

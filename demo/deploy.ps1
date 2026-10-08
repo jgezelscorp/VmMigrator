@@ -6,6 +6,9 @@ param(
     # Filter the fleet by size series, e.g. -Series Dsv3,DS2_v2,E2s_v3,A2_v2. Omit for the full fleet.
     [string[]]$Series,
     [string]$OperatorIp = '',
+    [string]$AdminUser = 'demoadmin',
+    # Falls back to $env:VMMIG_ADMIN_PASSWORD, then a generated password.
+    [string]$AdminPassword,
     [switch]$NoAutoShutdown,
     [switch]$NoBastion,
     [switch]$WhatIf
@@ -16,11 +19,12 @@ $here = $PSScriptRoot
 az account set -s $Subscription
 az group create -n $ResourceGroup -l $Location --tags purpose=vm-migrator-demo -o none
 
-$password = $env:VMMIG_ADMIN_PASSWORD
+$password = if ($AdminPassword) { $AdminPassword } else { $env:VMMIG_ADMIN_PASSWORD }
+$generated = $false
 if (-not $password) {
     $chars = (48..57) + (65..90) + (97..122) | ForEach-Object { [char]$_ }
     $password = 'Aa1!' + (-join (1..20 | ForEach-Object { $chars | Get-Random }))
-    Write-Host "Generated admin password (shown once): $password"
+    $generated = $true
 }
 
 $all = @(Get-Content "$here\vms.default.json" -Raw | ConvertFrom-Json)
@@ -36,7 +40,7 @@ $vmFile = Join-Path $here 'vms.selected.json'
 ConvertTo-Json -InputObject @($sel) -Depth 5 | Set-Content $vmFile
 
 $deployArgs = @('--resource-group', $ResourceGroup, '--template-file', "$here\main.bicep",
-    '--parameters', "adminPassword=$password", "operatorIp=$OperatorIp",
+    '--parameters', "adminUsername=$AdminUser", "adminPassword=$password", "operatorIp=$OperatorIp",
     "enableAutoShutdown=$((-not $NoAutoShutdown).ToString().ToLower())", "vms=@$vmFile")
 
 try {
@@ -47,4 +51,20 @@ finally { Remove-Item $vmFile -ErrorAction SilentlyContinue }
 
 if (-not $WhatIf -and -not $NoBastion) {
     & "$here\bastion.ps1" -Subscription $Subscription -ResourceGroup $ResourceGroup
+}
+
+if (-not $WhatIf) {
+    $vms = az vm list --subscription $Subscription -g $ResourceGroup --query '[].{name:name,size:hardwareProfile.vmSize,os:storageProfile.osDisk.osType}' -o json | ConvertFrom-Json
+    Write-Host ''
+    Write-Host '=== Logon information ===' -ForegroundColor Cyan
+    Write-Host "Username : $AdminUser"
+    Write-Host "Password : $password$(if ($generated) { '   (generated, shown only now)' })"
+    $bastion = az network bastion list --subscription $Subscription -g $ResourceGroup --query '[0].name' -o tsv 2>$null
+    if ($bastion) {
+        Write-Host "Access   : Azure portal > VM > Connect > Bastion (RDP for Windows, SSH for Linux); Bastion '$bastion'"
+    } else {
+        Write-Host 'Access   : VMs have no public IP; run .\demo\bastion.ps1 to create a Bastion'
+    }
+    Write-Host "Resource group: $ResourceGroup"
+    $vms | Sort-Object name | ForEach-Object { Write-Host ("  {0,-24} {1,-18} {2}" -f $_.name, $_.size, $_.os) }
 }
