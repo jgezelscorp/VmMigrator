@@ -206,7 +206,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
   }
 
   const targetFor = (id) => state.targets[id] ?? state.prechecks[id]?.targetSku ?? suggestTarget(state.vms.find((v) => v.id === id));
-  const blocked = () => [...state.selected].some((id) => state.prechecks[id]?.overall === 'BLOCK');
+  const blocked = () => [...state.selected].some((id) => state.prechecks[id]?.overall === 'BLOCK' && !(state.rebuild.has(id) && state.prechecks[id].rebuildAvailable));
   const prechecked = () => [...state.selected].every((id) => state.prechecks[id]);
 
   function updateButtons() {
@@ -256,7 +256,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
 
   async function toggleRebuild(id, on) {
     if (on) state.rebuild.add(id); else state.rebuild.delete(id);
-    await runPrecheck();
+    renderPrecheck(); updateButtons();
   }
 
   function confirmMigration() {
