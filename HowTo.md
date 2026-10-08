@@ -114,7 +114,8 @@ Open <http://127.0.0.1:3000/>. If you see `401 NotLoggedIn`, run `az login` agai
    constraints, monthly cost impact and reservation advice. Pricing follows the changes effective 1 Feb 2027:
    older VM families (Bv1, D, Ds, F, Fs, G, Gs, L, NP, HC, Av2, Amv2, Dv2, Dsv2, Fsv2, Lsv2) get +25% globally;
    other sizes get the regional increase (North Europe +17%, France Central/South +11%, West Europe/Norway +9%,
-   Southeast Asia +8%). The two are never stacked. Reservation advice notes that since 1 Jul 2026 reservations for
+   Southeast Asia +8%), except the Intel v7 families Dsv7, Ddsv7, Dlsv7, Dldsv7, Esv7 and Edsv7, which are excluded
+   from the regional increase. The two are never stacked. Reservation advice notes that since 1 Jul 2026 reservations for
    the older series can no longer be purchased or renewed, and recommends a reservation or savings plan on the new size.
 4. Start with **Dry run**, then run the real **Migrate**. For each VM the engine:
    re-validates, snapshots the disks, deallocates, resizes (and switches the disk controller to NVMe when needed),

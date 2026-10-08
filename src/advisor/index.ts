@@ -40,9 +40,18 @@ export function lifecycleFamily(size: string): string | undefined {
   return undefined;
 }
 
-/** Lifecycle +25% wins and is never stacked with the regional uplift. */
+/** Intel v7 families excluded from the regional increase. */
+export function regionalExcludedFamily(size: string): string | undefined {
+  const m = /^Standard_(D|E)\d+(?:-\d+)?(s|ds|ls|lds)_v7$/i.exec(size);
+  if (!m) return undefined;
+  const fam = `${m[1]!.toUpperCase()}${m[2]!.toLowerCase()}v7`;
+  return ['Dsv7', 'Ddsv7', 'Dlsv7', 'Dldsv7', 'Esv7', 'Edsv7'].find((f) => f === fam);
+}
+
+/** Lifecycle +25% wins and is never stacked with the regional uplift; selected Intel v7 families skip the regional uplift. */
 export function priceUplift(size: string, region: string): { pct: number; kind: UpliftKind } {
   if (lifecycleFamily(size)) return { pct: LIFECYCLE_UPLIFT_PCT, kind: 'lifecycle' };
+  if (regionalExcludedFamily(size)) return { pct: 0, kind: 'none' };
   const r = REGIONAL_UPLIFT_PCT[region.toLowerCase()];
   return r ? { pct: r, kind: 'regional' } : { pct: 0, kind: 'none' };
 }
@@ -334,7 +343,9 @@ export class SkuAdvisor {
           ? `${size}: VM lifecycle +${u.pct}% (global, replaces any regional increase)`
           : u.kind === 'regional'
             ? `${size}: regional +${u.pct}% (${vm.location})`
-            : `${size}: no announced increase`;
+            : regionalExcludedFamily(size) && REGIONAL_UPLIFT_PCT[vm.location.toLowerCase()]
+              ? `${size}: excluded from the ${vm.location} regional increase (${regionalExcludedFamily(size)})`
+              : `${size}: no announced increase`;
       const upliftNote = `Effective 1 Feb 2027 - ${describe(from, cu)}; ${describe(to, pu)}.`;
       const common = { currentUpliftPct: cu.pct, proposedUpliftPct: pu.pct, currentUpliftKind: cu.kind, proposedUpliftKind: pu.kind };
       if (cur === undefined || next === undefined) {
