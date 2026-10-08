@@ -135,7 +135,8 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
           h('br'), h('small', {}, `List today: ${money(c.currentMonthly)} -> ${money(c.proposedMonthly)} (${pct(c.deltaPct)}). Uplift: ${upl(c.currentUpliftKind, c.currentUpliftPct)} -> ${upl(c.proposedUpliftKind, c.proposedUpliftPct)}.`))
         : h('p', {}, c.message),
       h('h4', {}, 'Reservations ', badge(a.reservation.status === 'found' ? 'WARN' : 'PASS', a.reservation.status)),
-      h('p', {}, a.reservation.advice),
+      h('p', {}, h('b', {}, 'Current: '), a.reservation.currentLine ?? a.reservation.advice, h('br'), h('b', {}, 'Replacement: '), a.reservation.proposedLine ?? ''),
+      a.reservation.remarks ? h('p', {}, h('small', {}, `Remarks: ${a.reservation.remarks}`)) : '',
       ...[['Current', a.reservation.matches], ['Proposed', a.reservation.proposedMatches ?? []]].filter(([, l]) => l.length).map(([label, l]) =>
         h('ul', {}, l.map((m) => h('li', {}, `${label}: ${m.name} ${m.sku} x${m.quantity ?? '?'} (${m.match})${m.expiry ? `, expires ${m.expiry}` : ''}`)))),
       a.notes.length ? h('ul', {}, a.notes.map((n) => h('li', {}, n))) : '');
