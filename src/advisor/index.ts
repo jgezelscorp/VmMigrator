@@ -148,7 +148,7 @@ export interface SkuAdvice {
     deltaPctWithUplift?: number;
     message: string;
   };
-  reservation: { status: 'found' | 'none' | 'unknown'; matches: ReservationMatch[]; proposedMatches: ReservationMatch[]; advice: string };
+  reservation: { status: 'found' | 'none' | 'unknown'; matches: ReservationMatch[]; proposedMatches: ReservationMatch[]; currentLine: string; proposedLine: string; remarks: string; advice: string };
   notes: string[];
 }
 
@@ -402,6 +402,9 @@ export class SkuAdvisor {
         status: 'unknown',
         matches: [],
         proposedMatches: [],
+        currentLine: `Reservations covering ${vm.vmSize} could not be checked.`,
+        proposedLine: `Reservations covering ${proposed ?? 'the replacement SKU'} could not be checked.`,
+        remarks: 'Reading reservations needs Reservation Reader. Check Cost Management > Reservations manually.',
         advice: 'Reservations could not be read (needs Reservation Reader). Check Cost Management > Reservations manually.',
       };
     }
@@ -429,18 +432,27 @@ export class SkuAdvisor {
     };
     const matches = find(vm.vmSize);
     const proposedMatches = proposed ? find(proposed) : [];
-    const target = proposed ?? 'the new size';
     const fam = lifecycleFamily(vm.vmSize);
     const noRenew = fam ? ' It cannot be renewed (no new RIs for older series since 1 Jul 2026).' : '';
-    const parts: string[] = [];
-    parts.push(matches.length ? `Current ${vm.vmSize}: reserved (${matches.length}).${noRenew}` : `Current ${vm.vmSize}: no reservation.`);
+    const line = (size: string, m: ReservationMatch[]): string =>
+      m.length ? `Reservation covering ${size} found in Tenant (${m.length}).` : `No reservation covering ${size} found in Tenant.`;
+    const currentLine = line(vm.vmSize, matches);
+    const proposedLine = proposed ? line(proposed, proposedMatches) : 'No proposed SKU, so no reservation check.';
+    const remarks: string[] = [];
+    if (matches.length && noRenew) remarks.push(noRenew.trim());
     if (proposed) {
-      parts.push(
-        proposedMatches.length
-          ? `Proposed ${target}: reservation exists - will be used after migration.`
-          : `Proposed ${target}: no reservation.${matches.length ? ' The current reservation will not discount it; exchange/refund it or reuse it for other VMs of the same series, and buy a new reservation or savings plan for the new size.' : ' Consider a reservation or savings plan if it runs steadily.'}`,
-      );
+      if (proposedMatches.length) remarks.push('The reservation on the replacement SKU will be used after migration.');
+      else if (matches.length) remarks.push('The current reservation will not discount the replacement; exchange/refund it or reuse it for other VMs of the same series, and buy a new reservation or savings plan for the new size.');
+      else remarks.push('Consider a reservation or savings plan if it runs steadily.');
     }
-    return { status: matches.length || proposedMatches.length ? 'found' : 'none', matches, proposedMatches, advice: parts.join(' ') };
+    return {
+      status: matches.length || proposedMatches.length ? 'found' : 'none',
+      matches,
+      proposedMatches,
+      currentLine,
+      proposedLine,
+      remarks: remarks.join(' '),
+      advice: [currentLine, proposedLine, ...remarks].join(' '),
+    };
   }
 }
