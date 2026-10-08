@@ -114,6 +114,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
         row('Disk controller', sc?.diskControllers.join(', '), sp?.diskControllers.join(', ')),
         row('Accelerated networking', sc ? String(sc.acceleratedNetworking) : '', sp ? String(sp.acceleratedNetworking) : ''),
         row('Monthly (list)', money(c.currentMonthly), money(c.proposedMonthly)),
+        row('Impacted by regional price uplift', c.currentRegionalImpact ?? '-', c.proposedRegionalImpact ?? '-'),
         row('Increase from 1 Feb 2027', upl(c.currentUpliftKind, c.currentUpliftPct), upl(c.proposedUpliftKind, c.proposedUpliftPct)),
         row('Monthly (from 1 Feb 2027)', money(c.currentMonthlyWithUplift), money(c.proposedMonthlyWithUplift))));
     $('sku-info-title').textContent = `SKU comparison: ${a.vmName}`;
