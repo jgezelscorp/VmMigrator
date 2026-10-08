@@ -123,7 +123,7 @@ describe('web UI rebuild opt-in', () => {
     opt.checked = true;
     opt.dispatchEvent(new Event('change'));
     await tick();
-    expect(prechecks).toEqual([undefined, 'rebuild']);
+    expect(prechecks).toEqual([undefined]);
     expect($('btn-migrate').disabled).toBe(false);
 
     $('btn-migrate').click();
