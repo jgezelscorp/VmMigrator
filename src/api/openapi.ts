@@ -2,7 +2,7 @@ export const OPENAPI = {
   openapi: '3.0.3',
   info: { title: 'VmMigrator API', version: '0.1.0', description: 'Discover, pre-check, migrate and verify Azure VMs on retiring series. Binds to 127.0.0.1 only.' },
   paths: {
-    '/api/health': { get: { summary: 'Liveness; reports whether mock mode (VMM_MOCK=1) is active' } },
+    '/api/health': { get: { summary: 'Liveness' } },
     '/api/subscriptions': { get: { summary: 'Subscriptions visible to the az login: { subscriptions: [{id,name}] }' } },
     '/api/vms': {
       get: {

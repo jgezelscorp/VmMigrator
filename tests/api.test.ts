@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/api/index.js';
-import { DEMO_SUBSCRIPTION } from '../src/mock/fleet.js';
+import { createDemoFakeArm, DEMO_SUBSCRIPTION } from './helpers/fleet.js';
+import { MemoryJobStore } from '../src/migration/index.js';
 
-const mk = () => buildApp({ mock: true, fast: true });
+const mk = () => buildApp({ arm: createDemoFakeArm({ latencyMs: 0 }), store: new MemoryJobStore(), fast: true });
 async function waitTerminal(app: ReturnType<typeof mk>, id: string) {
   for (let i = 0; i < 100; i++) {
     const j = (await app.inject({ method: 'GET', url: `/api/migrations/${id}` })).json();
@@ -12,10 +13,10 @@ async function waitTerminal(app: ReturnType<typeof mk>, id: string) {
   throw new Error('timeout');
 }
 
-describe('REST API (mock mode)', () => {
+describe('REST API (in-memory ARM)', () => {
   it('serves health, the web UI and openapi', async () => {
     const app = mk();
-    expect((await app.inject({ url: '/api/health' })).json()).toEqual({ status: 'ok', mock: true });
+    expect((await app.inject({ url: '/api/health' })).json()).toEqual({ status: 'ok' });
     const index = await app.inject({ url: '/' });
     expect(index.statusCode).toBe(200);
     expect(index.headers['content-type']).toMatch(/html/);
@@ -86,7 +87,6 @@ describe('REST API (mock mode)', () => {
 
   it('reports a clear 401 when az is not logged in', async () => {
     const app = buildApp({
-      mock: false,
       arm: {
         list: async () => {
           throw Object.assign(new Error('Please run az login'), { name: 'CredentialUnavailableError' });

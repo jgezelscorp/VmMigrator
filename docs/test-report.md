@@ -1,6 +1,6 @@
 # Live end-to-end test report (issue #9)
 
-Run on 2026-10-07 against the real demo fleet (subscription `306af555-a7da-440e-9b89-31b913b02384`, `rg-vmmigrator-demo`, swedencentral), real server (`npm start`, no `VMM_MOCK`), `az` login credentials. All guest checks used run-command (no SSH/RDP).
+Run on 2026-10-07 against the real demo fleet (subscription `306af555-a7da-440e-9b89-31b913b02384`, `rg-vmmigrator-demo`, swedencentral), real server (`npm start`), `az` login credentials. All guest checks used run-command (no SSH/RDP).
 
 ## Results matrix
 

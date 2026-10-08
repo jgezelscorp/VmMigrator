@@ -3,8 +3,8 @@ import { loadCatalog } from '../../src/catalog/index.js';
 import { getVm } from '../../src/discovery/discovery.js';
 import type { PostCheckResult } from '../../src/domain/types.js';
 import { MigrationEngine, MigrationService, MemoryJobStore, type JobStore, type MigrationDeps } from '../../src/migration/index.js';
-import { FakeArm } from '../../src/mock/fakeArm.js';
-import { createDemoFakeArm } from '../../src/mock/fleet.js';
+import { FakeArm } from './fakeArm.js';
+import { createDemoFakeArm } from './fleet.js';
 import { runPreChecks } from '../../src/prechecks/index.js';
 
 export const catalog = loadCatalog();

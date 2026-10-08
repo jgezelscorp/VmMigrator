@@ -12,7 +12,7 @@ export function buildServer(opts: BuildOptions = {}): FastifyInstance {
 export async function start(port = Number(process.env['PORT'] ?? DEFAULT_PORT)): Promise<FastifyInstance> {
   const app = buildServer();
   await app.listen({ host: HOST, port });
-  console.log(`VmMigrator listening on http://${HOST}:${port}${app.ctx.mock ? ' (VMM_MOCK=1: demo data, no Azure calls)' : ''}`);
+  console.log(`VmMigrator listening on http://${HOST}:${port}`);
   return app;
 }
 

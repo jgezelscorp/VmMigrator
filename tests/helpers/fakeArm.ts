@@ -1,4 +1,4 @@
-import { ArmError, type ArmClient, type ArmMethod } from '../azure/arm.js';
+import { ArmError, type ArmClient, type ArmMethod } from '../../src/azure/arm.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Raw = any;
@@ -34,7 +34,7 @@ const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 /**
  * Stateful in-memory Azure Resource Manager double. Implements enough of Compute/Network/SKU APIs for discovery,
- * pre-checks, migration and post-checks; used by offline tests and by the VMM_MOCK=1 demo mode.
+ * pre-checks, migration and post-checks; used by offline tests.
  */
 export class FakeArm implements ArmClient {
   readonly calls: RecordedCall[] = [];

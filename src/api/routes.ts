@@ -81,7 +81,7 @@ function sendError(reply: FastifyReply, e: unknown): FastifyReply {
   if (/CredentialUnavailable|AuthenticationRequired|AzureCliCredential/i.test(name + message) || /az login|Please run 'az/i.test(message)) {
     return reply.code(401).send({
       error: 'NotLoggedIn',
-      message: 'Azure credentials are not available. Run "az login" in a terminal and retry (or start with VMM_MOCK=1 for demo data).',
+      message: 'Azure credentials are not available. Run "az login" in a terminal and retry.',
     });
   }
   const status = (e as { status?: number }).status;
@@ -102,7 +102,7 @@ export function buildApp(opts: BuildOptions = {}): FastifyInstance {
   app.decorate('ctx', ctx);
   app.setErrorHandler((e, _req, reply) => sendError(reply, e));
 
-  app.get('/api/health', async () => ({ status: 'ok', mock: ctx.mock }));
+  app.get('/api/health', async () => ({ status: 'ok' }));
   app.get('/api/openapi.json', async () => OPENAPI);
 
   app.get('/api/subscriptions', async () => {
