@@ -155,6 +155,11 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
           if (a.proposed) { state.targets[a.vmId] = a.proposed.name; delete state.prechecks[a.vmId]; state.rebuild.delete(a.vmId); }
         }
         renderTable(); renderPrecheck();
+      } catch (e) { showError(e); }
+    });
+  }
+
+  function renderTable() {
     const rows = filtered();
     $('count').textContent = `${rows.length} of ${state.vms.length} VMs, ${state.selected.size} selected`;
     $('vm-table').querySelector('tbody').replaceChildren(...rows.map((vm) => h('tr', {},
@@ -218,6 +223,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
         }
         renderPrecheck(); renderTable();
         $('precheck').scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+      } catch (e) { showError(e); }
     });
   }
 
