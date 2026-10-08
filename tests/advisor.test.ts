@@ -51,6 +51,25 @@ describe('advisor', () => {
     expect(r.threeYear).toBeCloseTo(1314 / 26280, 6);
   });
 
+  it('follows pagination, keeps Windows RI when PAYGO lookups fail, and does not cache failures', async () => {
+    const page1 = { Items: [{ reservationTerm: '1 Year', retailPrice: 876 }], NextPageLink: 'https://next' };
+    const page2 = { Items: [{ reservationTerm: '3 Years', retailPrice: 1314 }], NextPageLink: null };
+    const f = (async (u: string) => ({ ok: !u.includes('Consumption'), json: async () => (u === 'https://next' ? page2 : page1) })) as unknown as typeof fetch;
+    const r = await new RetailPriceProvider(f).reservationHourly('swedencentral', 'Standard_D2s_v6', 'Windows');
+    expect(r.oneYear).toBeCloseTo(876 / 8760, 6);
+    expect(r.threeYear).toBeCloseTo(1314 / 26280, 6);
+
+    let fail = true;
+    const g = (async () => {
+      if (fail) throw new Error('offline');
+      return { ok: true, json: async () => ({ Items: page1.Items }) };
+    }) as unknown as typeof fetch;
+    const p = new RetailPriceProvider(g);
+    expect(await p.reservationHourly('r', 's', 'Linux')).toEqual({});
+    fail = false;
+    expect((await p.reservationHourly('r', 's', 'Linux')).oneYear).toBeCloseTo(876 / 8760, 6);
+  });
+
   it('returns undefined when the price API fails', async () => {
     const bad = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
     expect(await new RetailPriceProvider(bad).hourlyPrice('x', 'y', 'Linux')).toBeUndefined();
