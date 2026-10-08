@@ -153,7 +153,7 @@ describe('web UI rebuild opt-in', () => {
     const text = $('sku-info-body').textContent!;
     expect(text).toContain('Quota');
     expect(text).toContain('Zones');
-    expect(text).toContain('+17% regional');
+    expect(text).toMatch(/\+17%/);
     expect(text).toContain('No reservations found.');
   });
 

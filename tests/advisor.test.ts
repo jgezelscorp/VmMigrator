@@ -40,6 +40,17 @@ describe('advisor', () => {
     expect(await p.hourlyPrice('swedencentral', 'Standard_D2s_v6', 'Windows')).toBe(0.4);
   });
 
+  it('derives hourly reservation prices from term totals', async () => {
+    const ri = [
+      { reservationTerm: '1 Year', retailPrice: 876, productName: 'VM', skuName: 'D2s v6', meterName: 'D2s v6' },
+      { reservationTerm: '3 Years', retailPrice: 1314, productName: 'VM', skuName: 'D2s v6', meterName: 'D2s v6' },
+    ];
+    const f = (async () => ({ ok: true, json: async () => ({ Items: ri }) })) as unknown as typeof fetch;
+    const r = await new RetailPriceProvider(f).reservationHourly('swedencentral', 'Standard_D2s_v6', 'Linux');
+    expect(r.oneYear).toBeCloseTo(876 / 8760, 6);
+    expect(r.threeYear).toBeCloseTo(1314 / 26280, 6);
+  });
+
   it('returns undefined when the price API fails', async () => {
     const bad = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
     expect(await new RetailPriceProvider(bad).hourlyPrice('x', 'y', 'Linux')).toBeUndefined();
