@@ -325,8 +325,9 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
       const vm = state.vms.find((v) => v.id === j.plan.vmId);
       const steps = j.plan.strategy === 'rebuild' ? REBUILD_STEPS : STEPS;
       const finished = TERMINAL.has(j.state);
-      const pct = j.state === 'Done' ? 100 : Math.round((steps.filter((s) => j.completedSteps.includes(s)).length / steps.length) * 100);
-      const current = finished ? null : steps.find((s) => !j.completedSteps.includes(s));
+      const isDone = (s) => j.completedSteps.includes(s) || (j.plan.dryRun && j.state === 'Done');
+      const pct = j.state === 'Done' ? 100 : Math.round((steps.filter(isDone).length / steps.length) * 100);
+      const current = finished ? null : steps.find((s) => !isDone(s));
       const kids = [
         h('h3', {}, vm?.name ?? j.plan.vmId, ' ', j.plan.sourceSku, ' → ', j.plan.targetSku, ' ', badge(j.state),
           j.plan.dryRun ? ' (dry run)' : ''),
@@ -334,7 +335,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
           h('span', { style: `width:${pct}%` })),
         h('p', { class: 'pct' }, finished ? `${j.state} · ${pct}%` : `${pct}% · ${current ?? 'finishing'}…`),
         h('ol', { class: 'steps', 'aria-label': 'Migration steps' }, steps.map((s) =>
-          h('li', { class: j.completedSteps.includes(s) ? 'done' : s === current ? 'current' : '' }, (j.completedSteps.includes(s) ? '✓ ' : '') + s))),
+          h('li', { class: isDone(s) ? 'done' : s === current ? 'current' : '' }, (isDone(s) ? '✓ ' : '') + s))),
       ];
       if (j.error) kids.push(h('p', { class: 'error', role: 'alert' }, j.error));
       if (j.state === 'Failed' || j.state === 'Restored' || j.state === 'RollingBack') {
