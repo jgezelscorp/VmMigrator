@@ -124,10 +124,28 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
         row('Network (Mbps) / max NICs', net(sc), net(sp)),
         row('Processor', sc?.processor ?? 'n/a', sp?.processor ?? 'n/a'),
         row('Est. per-vCPU performance', sc?.perfIndex ? '100% (baseline)' : 'n/a', sc?.perfIndex && sp?.perfIndex ? `~${Math.round((sp.perfIndex / sc.perfIndex) * 100)}% (est. ${sp.perfIndex >= sc.perfIndex ? '+' : ''}${Math.round((sp.perfIndex / sc.perfIndex - 1) * 100)}%)` : 'n/a'),
-        row('Monthly (list)', money(c.currentMonthly), money(c.proposedMonthly)),
-        row('Impacted by regional price uplift', c.currentRegionalImpact ?? '-', c.proposedRegionalImpact ?? '-'),
-        row('Increase from 1 Feb 2027', upl(c.currentUpliftKind, c.currentUpliftPct), upl(c.proposedUpliftKind, c.proposedUpliftPct)),
-        row('Monthly (from 1 Feb 2027)', money(c.currentMonthlyWithUplift), money(c.proposedMonthlyWithUplift))));
+        row('Impacted by regional price uplift', c.currentRegionalImpact ?? '-', c.proposedRegionalImpact ?? '-')));
+    const covered = (a.reservation.matches ?? []).length > 0;
+    const curRi = c.currentOneYearMonthly ?? c.currentThreeYearMonthly;
+    const baseline = covered && curRi != null ? curRi : c.currentMonthlyWithUplift;
+    const vs = (t) => (baseline && t != null ? h('span', { style: `font-weight:700;color:${t > baseline ? '#c0392b' : '#1e8e3e'}` }, pct(((t - baseline) / baseline) * 100)) : '—');
+    const fin = (label, basis, base, upliftTxt, total, bold) =>
+      h('tr', bold ? { class: 'fin-base' } : {}, h('th', {}, label), h('td', {}, basis), h('td', {}, money(base)), h('td', {}, upliftTxt), h('td', {}, h('strong', {}, money(total))), h('td', {}, bold ? 'baseline' : vs(total)));
+    const upTxt = (kind, p, amount) => (kind === 'none' ? 'none' : `+${p}% (${kind}) = +${money(amount)}`);
+    const curUp = c.currentMonthlyWithUplift != null ? c.currentMonthlyWithUplift - c.currentMonthly : 0;
+    const newUp = c.proposedMonthlyWithUplift != null ? c.proposedMonthlyWithUplift - c.proposedMonthly : 0;
+    const finRows = [];
+    if (covered && curRi != null) {
+      finRows.push(fin(`Current ${sc?.name ?? ''}`, `Reservation (${c.currentOneYearMonthly != null ? '1-yr' : '3-yr'} rate, est.)`, curRi, 'none (RI price is fixed)', curRi, true));
+    } else {
+      finRows.push(fin(`Current ${sc?.name ?? ''}`, 'Pay-as-you-go', c.currentMonthly, upTxt(c.currentUpliftKind, c.currentUpliftPct, curUp), c.currentMonthlyWithUplift, true));
+    }
+    finRows.push(fin(`New ${sp?.name ?? ''}`, 'Pay-as-you-go', c.proposedMonthly, upTxt(c.proposedUpliftKind, c.proposedUpliftPct, newUp), c.proposedMonthlyWithUplift));
+    finRows.push(fin(`New ${sp?.name ?? ''}`, '1-year reservation', c.proposedOneYearMonthly, 'none (RI price is fixed)', c.proposedOneYearMonthly));
+    finRows.push(fin(`New ${sp?.name ?? ''}`, '3-year reservation', c.proposedThreeYearMonthly, 'none (RI price is fixed)', c.proposedThreeYearMonthly));
+    const finTable = h('table', { class: 'cmp' },
+      h('thead', {}, h('tr', {}, ['Option', 'Price basis', 'List /month', 'Uplift from 1 Feb 2027', 'Total /month', 'vs current'].map((t) => h('th', {}, t)))),
+      h('tbody', {}, finRows));
     $('sku-info-title').textContent = `SKU comparison: ${a.vmName}`;
     const checks = [a.quota.status === 'ok', a.zones.status === 'ok'];
     const blocked = a.quota.status === 'insufficient' || a.zones.status === 'constrained';
@@ -141,10 +159,8 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
       h('h4', {}, 'Zones ', badge(a.zones.status === 'ok' ? 'PASS' : a.zones.status === 'constrained' ? 'BLOCK' : 'WARN', a.zones.status)),
       h('p', {}, a.zones.message),
       h('h4', {}, 'Financial impact'),
-      c.deltaPctWithUplift != null
-        ? h('p', {}, h('strong', {}, `${money(c.currentMonthlyWithUplift)} -> ${money(c.proposedMonthlyWithUplift)} /month `),
-          h('span', { style: `font-weight:700;color:${c.deltaPctWithUplift > 0 ? '#c0392b' : '#1e8e3e'}` }, `(${pct(c.deltaPctWithUplift)} from 1 Feb 2027)`),
-          h('br'), h('small', {}, `List today: ${money(c.currentMonthly)} -> ${money(c.proposedMonthly)} (${pct(c.deltaPct)}). Uplift: ${upl(c.currentUpliftKind, c.currentUpliftPct)} -> ${upl(c.proposedUpliftKind, c.proposedUpliftPct)}.`))
+      c.status === 'ok'
+        ? h('div', {}, finTable, h('p', {}, h('small', {}, `${c.message} Reservation prices are the retail rate per month (term total / months; Windows adds the PAYGO license) and are not affected by the uplift.${covered && curRi == null ? ' The current VM is covered by a reservation but its RI price is not published, so PAYGO is used as baseline.' : ''}`)))
         : h('p', {}, c.message),
       h('h4', {}, 'Reservations ', badge(a.reservation.status === 'found' ? 'WARN' : 'PASS', a.reservation.status)),
       h('p', {}, h('b', {}, 'Current: '), a.reservation.currentLine ?? a.reservation.advice, h('br'), h('b', {}, 'Replacement: '), a.reservation.proposedLine ?? ''),

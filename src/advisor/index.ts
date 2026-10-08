@@ -63,9 +63,12 @@ const HOURS_PER_MONTH = 730;
 export interface PriceProvider {
   /** Pay-as-you-go list price per hour in USD, or undefined when unavailable */
   hourlyPrice(region: string, sku: string, os: 'Windows' | 'Linux'): Promise<number | undefined>;
+  /** Effective hourly price with a 1- or 3-year reservation (Windows includes the license at PAYGO rate), when available */
+  reservationHourly?(region: string, sku: string, os: 'Windows' | 'Linux'): Promise<{ oneYear?: number; threeYear?: number }>;
 }
 
 interface RetailItem {
+  reservationTerm?: string;
   retailPrice: number;
   productName?: string;
   skuName?: string;
@@ -85,6 +88,41 @@ export class RetailPriceProvider implements PriceProvider {
       this.cache.set(key, p);
     }
     return p;
+  }
+
+  reservationHourly(region: string, sku: string, os: 'Windows' | 'Linux'): Promise<{ oneYear?: number; threeYear?: number }> {
+    const key = `ri/${region}/${sku}/${os}`.toLowerCase();
+    let p = this.riCache.get(key);
+    if (!p) {
+      p = this.fetchReservation(region, sku, os).catch(() => ({}));
+      this.riCache.set(key, p);
+    }
+    return p;
+  }
+
+  private readonly riCache = new Map<string, Promise<{ oneYear?: number; threeYear?: number }>>();
+
+  private async fetchReservation(region: string, sku: string, os: 'Windows' | 'Linux'): Promise<{ oneYear?: number; threeYear?: number }> {
+    const filter = `serviceName eq 'Virtual Machines' and priceType eq 'Reservation' and armRegionName eq '${region}' and armSkuName eq '${sku}'`;
+    const res = await this.fetchImpl(`https://prices.azure.com/api/retail/prices?$filter=${encodeURIComponent(filter)}`);
+    if (!res.ok) return {};
+    const items = ((await res.json()) as { Items?: RetailItem[] }).Items ?? [];
+    const term = (t: string, months: number): number | undefined => {
+      const v = items.filter((i) => i.reservationTerm === t && i.retailPrice > 0).map((i) => i.retailPrice / (months * HOURS_PER_MONTH));
+      return v.length ? Math.min(...v) : undefined;
+    };
+    const one = term('1 Year', 12);
+    const three = term('3 Years', 36);
+    let license = 0;
+    if (os === 'Windows') {
+      const [win, lin] = await Promise.all([this.hourlyPrice(region, sku, 'Windows'), this.hourlyPrice(region, sku, 'Linux')]);
+      if (win === undefined || lin === undefined) return {};
+      license = Math.max(0, win - lin);
+    }
+    return {
+      ...(one !== undefined ? { oneYear: one + license } : {}),
+      ...(three !== undefined ? { threeYear: three + license } : {}),
+    };
   }
 
   private async fetchPrice(region: string, sku: string, os: 'Windows' | 'Linux'): Promise<number | undefined> {
@@ -160,6 +198,10 @@ export interface SkuAdvice {
     proposedRegionalImpact?: string;
     currentMonthlyWithUplift?: number;
     proposedMonthlyWithUplift?: number;
+    currentOneYearMonthly?: number;
+    currentThreeYearMonthly?: number;
+    proposedOneYearMonthly?: number;
+    proposedThreeYearMonthly?: number;
     deltaPctWithUplift?: number;
     message: string;
   };
@@ -423,8 +465,23 @@ export class SkuAdvisor {
     const nextM = next * HOURS_PER_MONTH;
     const curU = curM * (1 + cu.pct / 100);
     const nextU = nextM * (1 + pu.pct / 100);
+    const noRi: { oneYear?: number; threeYear?: number } = {};
+    const [curRi, nextRi] = prices.reservationHourly
+      ? await Promise.all([
+          prices.reservationHourly(vm.location, from, vm.osType).catch(() => noRi),
+          prices.reservationHourly(vm.location, to, vm.osType).catch(() => noRi),
+        ])
+      : [noRi, noRi];
+    const mo = (h: number | undefined): number | undefined => (h === undefined ? undefined : round(h * HOURS_PER_MONTH));
+    const ri = {
+      ...(mo(curRi.oneYear) !== undefined ? { currentOneYearMonthly: mo(curRi.oneYear) } : {}),
+      ...(mo(curRi.threeYear) !== undefined ? { currentThreeYearMonthly: mo(curRi.threeYear) } : {}),
+      ...(mo(nextRi.oneYear) !== undefined ? { proposedOneYearMonthly: mo(nextRi.oneYear) } : {}),
+      ...(mo(nextRi.threeYear) !== undefined ? { proposedThreeYearMonthly: mo(nextRi.threeYear) } : {}),
+    };
     return {
       status: 'ok',
+      ...ri,
       currentHourly: cur,
       proposedHourly: next,
       currentMonthly: round(curM),
