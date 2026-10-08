@@ -96,6 +96,9 @@ export class RetailPriceProvider implements PriceProvider {
     if (!p) {
       p = this.fetchReservation(region, sku, os).catch(() => ({}));
       this.riCache.set(key, p);
+      void p.then((r) => {
+        if (r.oneYear === undefined && r.threeYear === undefined) this.riCache.delete(key);
+      });
     }
     return p;
   }
@@ -104,9 +107,15 @@ export class RetailPriceProvider implements PriceProvider {
 
   private async fetchReservation(region: string, sku: string, os: 'Windows' | 'Linux'): Promise<{ oneYear?: number; threeYear?: number }> {
     const filter = `serviceName eq 'Virtual Machines' and priceType eq 'Reservation' and armRegionName eq '${region}' and armSkuName eq '${sku}'`;
-    const res = await this.fetchImpl(`https://prices.azure.com/api/retail/prices?$filter=${encodeURIComponent(filter)}`);
-    if (!res.ok) return {};
-    const items = ((await res.json()) as { Items?: RetailItem[] }).Items ?? [];
+    const items: RetailItem[] = [];
+    let url: string | undefined = `https://prices.azure.com/api/retail/prices?$filter=${encodeURIComponent(filter)}`;
+    for (let page = 0; url && page < 5; page++) {
+      const res = await this.fetchImpl(url);
+      if (!res.ok) throw new Error(`Retail Prices API ${res.status}`);
+      const body = (await res.json()) as { Items?: RetailItem[]; NextPageLink?: string | null };
+      items.push(...(body.Items ?? []));
+      url = body.NextPageLink ?? undefined;
+    }
     const term = (t: string, months: number): number | undefined => {
       const v = items.filter((i) => i.reservationTerm === t && i.retailPrice > 0).map((i) => i.retailPrice / (months * HOURS_PER_MONTH));
       return v.length ? Math.min(...v) : undefined;
@@ -116,8 +125,8 @@ export class RetailPriceProvider implements PriceProvider {
     let license = 0;
     if (os === 'Windows') {
       const [win, lin] = await Promise.all([this.hourlyPrice(region, sku, 'Windows'), this.hourlyPrice(region, sku, 'Linux')]);
-      if (win === undefined || lin === undefined) return {};
-      license = Math.max(0, win - lin);
+      // Reservation shows the compute price; the Windows license is added only when both PAYGO lookups succeed.
+      if (win !== undefined && lin !== undefined) license = Math.max(0, win - lin);
     }
     return {
       ...(one !== undefined ? { oneYear: one + license } : {}),
