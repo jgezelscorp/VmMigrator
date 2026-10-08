@@ -1,36 +1,23 @@
 # Demo fleet (issue #2)
 
-Bicep that deploys a small fleet of cheap VMs on retiring series (Dsv3, DSv2, Ev3, Av2, Fsv2) so the migration engine has realistic inputs.
+Bicep that deploys a small fleet of cheap VMs on retiring series (Fsv1, DSv2, Dsv3) with graded OS ages so the migration engine has realistic inputs.
 
-> **Status: DEPLOYED** (2026-10-07) to subscription `ME-MngEnvMCAP578105-jangezels-1` (`306af555-a7da-440e-9b89-31b913b02384`), tenant `df965ea6-09d5-4066-9be6-da5094c98b6e`, region `swedencentral`, resource group `rg-vmmigrator-demo`. Quota was 0/100 in every family (Dsv3, Dv3, DSv2, Av2, Esv3, Fsv2, plus Dasv7/Easv7) with no SKU restrictions, so the full 8-VM fleet deployed first time (what-if: 19 resources). All 8 VMs are **Running**, deployed with `-NoAutoShutdown`. The admin password was generated and is not recorded here.
-
-Verified with `az vm list -g rg-vmmigrator-demo -d -o table`:
-
-| Name | Size | Region | OS | Gen | State |
-|---|---|---|---|---|---|
-| vmmig-lnx-dsv3-g2-data | Standard_D2s_v3 | swedencentral | Linux | 2 | running |
-| vmmig-win-dsv3-g2 | Standard_D2s_v3 | swedencentral | Windows | 2 | running |
-| vmmig-lnx-dsv3-g1 | Standard_D2s_v3 | swedencentral | Linux | 1 | running |
-| vmmig-lnx-dsv2-g2-avs1 | Standard_DS2_v2 | swedencentral | Linux | 2 | running |
-| vmmig-lnx-dsv2-g2-avs2 | Standard_DS2_v2 | swedencentral | Linux | 2 | running |
-| vmmig-win-esv3-g2 | Standard_E2s_v3 | swedencentral | Windows | 2 | running |
-| vmmig-lnx-av2-g1 | Standard_A2_v2 | swedencentral | Linux | 1 | running |
-| vmmig-lnx-fsv2-g2 | Standard_F2s_v2 | swedencentral | Linux | 2 | running |
+> **Status: DEPLOYED** (redeployed 2026-10-08) to subscription `ME-MngEnvMCAP578105-jangezels-1` (`306af555-a7da-440e-9b89-31b913b02384`), region `swedencentral`, resource group `rg-vmmigrator-demo`. The fleet is 6 VMs (3 Linux + 3 Windows) on v1/v2/v3 sizes, verified with `az vm list`.
 
 Scripts default to this subscription; override with `-Subscription`.
 
 ## Fleet (defaults in `demo/vms.default.json`, prefix `vmmig-`)
 
-| VM | Size | OS | Gen | Variant |
+| VM | Size (series) | OS image | Gen | Security |
 |---|---|---|---|---|
-| vmmig-lnx-dsv3-g2-data | Standard_D2s_v3 | Ubuntu 22.04 | 2 | 32 GB data disk |
-| vmmig-win-dsv3-g2 | Standard_D2s_v3 | WS2022 | 2 | |
-| vmmig-lnx-dsv3-g1 | Standard_D2s_v3 | Ubuntu 22.04 | **1** | Gen1 blocker demo |
-| vmmig-lnx-dsv2-g2-avs1 / avs2 | Standard_DS2_v2 | Ubuntu 22.04 | 2 | availability set `vmmig-avset` |
-| vmmig-win-esv3-g2 | Standard_E2s_v3 | WS2022 | 2 | |
-| vmmig-lnx-av2-g1 | Standard_A2_v2 | Ubuntu 22.04 | 1 | Av2 |
-| vmmig-lnx-fsv2-g2 | Standard_F2s_v2 | Ubuntu 22.04 | 2 | optional |
+| vmmig-lnx-v1-ubuntu1604-g1 | Standard_F2s (Fsv1) | Ubuntu 16.04 LTS | 1 | Standard |
+| vmmig-lnx-v2-ubuntu1804-g2 | Standard_DS2_v2 (DSv2) | Ubuntu 18.04 LTS | 2 | Standard |
+| vmmig-lnx-v3-ubuntu2004-tl | Standard_D2s_v3 (Dsv3) | Ubuntu 20.04 LTS | 2 | Trusted Launch |
+| vmmig-win-v1-ws2016-g1 | Standard_F2s (Fsv1) | Windows Server 2016 (10.0.14393) | 1 | Standard |
+| vmmig-win-v2-ws2019-g2 | Standard_DS2_v2 (DSv2) | Windows Server 2019 (10.0.17763) | 2 | Standard |
+| vmmig-win-v3-ws2022-tl | Standard_D2s_v3 (Dsv3) | Windows Server 2022 (10.0.20348) | 2 | Trusted Launch |
 
+Ubuntu 16.04 is the oldest image the Marketplace still offers in swedencentral (14.04 is only available as Ubuntu Pro). Older guest OSes are deliberate: they show how OS age affects the migration (NVMe/driver support, Gen1, security type).
 Default region `swedencentral`, resource group `rg-vmmigrator-demo`. Every resource is tagged `purpose=vm-migrator-demo`.
 
 Access: `deploy.ps1` also runs `bastion.ps1`, creating an idempotent Azure Bastion (Basic, `AzureBastionSubnet` 10.50.2.0/26) so you can connect via portal > VM > Connect > Bastion (user `demoadmin`). Use `-NoBastion` to skip, or `.\demo\bastion.ps1 [-Sku Standard] [-Remove]` directly. Bastion adds roughly €0.15-0.20/hour (estimate) until cleanup.
@@ -53,11 +40,11 @@ az vm list -g rg-vmmigrator-demo -d -o table
 Since July 2026 new quota for D/Dsv2/Dv3/Dsv3/Ev3/Av2/Fsv2 is restricted (see `docs/research.md` §1). Check before deploying:
 
 ```powershell
-az vm list-usage -l <region> -o table | Select-String "Dsv3|DSv2|Esv3|Av2|FSv2|Total Regional"
+az vm list-usage -l <region> -o table | Select-String "Dsv3|DSv2|FSv1|Total Regional"
 az vm list-skus -l <region> --size Standard_D2s_v3 --resource-type virtualMachines -o table   # look for NotAvailableForSubscription
 ```
 
-Fallbacks: try `westeurope`, `northeurope`, `eastus2`; use `-Series` to drop series that fail (e.g. Fsv2, Av2); Dv3/Dsv3 are the most likely to have quota left. Av2 is Gen1-only. If a Gen2 image is rejected for a size, deploy it Gen1.
+Fallbacks: try `westeurope`, `northeurope`, `eastus2`; use `-Series` to drop series that fail (e.g. Fsv1); Dv3/Dsv3 are the most likely to have quota left. If a Gen2 image is rejected for a size, deploy it Gen1.
 
 ## Cleanup
 

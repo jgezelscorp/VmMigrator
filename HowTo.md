@@ -19,7 +19,7 @@ Start with Path A to learn the UI, then do Path B.
 | PowerShell | 7+ recommended (5.1 works for the demo scripts) | `$PSVersionTable.PSVersion` |
 | Azure CLI | 2.60+ (Path B only) | `az version` |
 | Azure subscription | Path B only. Role **Owner**, or **Contributor** plus **User Access Administrator**, on a subscription or resource group | `az role assignment list --assignee <you>` |
-| VM quota | Path B only, about 16 vCPUs across Dsv3/Dv3, DSv2, Esv3, Av2, Fsv2 in one region | see section 6 |
+| VM quota | Path B only, about 12 vCPUs across Fsv1, DSv2, Dsv3 in one region | see section 6 |
 
 > The repo is private: `gh auth login` (or any Git credential) with access to `jgezelscorp/VmMigrator` is required to clone.
 
@@ -71,7 +71,7 @@ Since mid-2026 new quota for v1/v2/v3 families is restricted. Check the region y
 
 ```powershell
 $loc = 'swedencentral'
-az vm list-usage -l $loc -o table | Select-String "Dsv3|DSv2|Esv3|Av2|FSv2|Dasv7|Easv7|Total Regional"
+az vm list-usage -l $loc -o table | Select-String "Dsv3|DSv2|FSv1|Dasv7|Easv7|Total Regional"
 az vm list-skus -l $loc --size Standard_D2s_v3 --resource-type virtualMachines -o table   # look for NotAvailableForSubscription
 ```
 
@@ -90,24 +90,24 @@ The **target** v7 family also needs quota (for example Dasv7/Dsv7 for the D-seri
   `-AdminPassword`, then `$env:VMMIG_ADMIN_PASSWORD`, then a generated one. At the end of the deploy a **Logon information**
   block prints the user, password, how to connect (Bastion) and the VM list. A generated password is shown only there.
   Changing `-AdminUser` on an existing deployment is not possible; run `rebuild.ps1` first.
-- Use `-Series Dsv3,DS2_v2` for a subset, and `-Subscription <id>` / `-ResourceGroup <name>` to override the defaults
+- Use `-Series Dsv3,DS2_v2,F2s` for a subset, and `-Subscription <id>` / `-ResourceGroup <name>` to override the defaults
   (`rg-vmmigrator-demo`).
 - Add `-OperatorIp <your-cidr>` to allow SSH/RDP from your address to the VNet. VMs have **no public IPs**; connect via the **Azure Bastion** (Basic) that `deploy.ps1` creates: Azure portal > VM > Connect > Bastion, user `demoadmin`. Skip it with `-NoBastion`; create/remove it separately with `.\demo\bastion.ps1` / `.\demo\bastion.ps1 -Remove` (Bastion bills hourly, roughly €0.15-0.20/h; cleanup removes it).
 - Without `-NoAutoShutdown` the VMs shut down daily at 19:00 UTC. A stopped VM is fine for migration, but keep
   them running if you want the post-checks (agent heartbeat) to be meaningful.
 
-The 8 VMs created (all tagged `purpose=vm-migrator-demo`):
+The 6 VMs created (all tagged `purpose=vm-migrator-demo`): 3 Linux + 3 Windows, one per retiring generation (v1/v2/v3).
 
-| VM | Size | OS | Gen | Scenario |
+| VM | Size (series) | OS image | Gen | Security |
 |---|---|---|---|---|
-| vmmig-lnx-dsv3-g2-data | D2s_v3 | Ubuntu | 2 | data disk, in-place resize |
-| vmmig-win-dsv3-g2 | D2s_v3 | Windows 2022 | 2 | temp disk, needs the rebuild strategy |
-| vmmig-lnx-dsv3-g1 | D2s_v3 | Ubuntu | 1 | Gen1, needs the Trusted Launch upgrade |
-| vmmig-lnx-dsv2-g2-avs1 / avs2 | DS2_v2 | Ubuntu | 2 | availability set |
-| vmmig-win-esv3-g2 | E2s_v3 | Windows 2022 | 2 | temp disk, rebuild strategy |
-| vmmig-lnx-av2-g1 | A2_v2 | Ubuntu | 1 | Gen1 |
-| vmmig-lnx-fsv2-g2 | F2s_v2 | Ubuntu | 2 | optional |
+| vmmig-lnx-v1-ubuntu1604-g1 | Standard_F2s (Fsv1) | Ubuntu 16.04 LTS | 1 | Standard |
+| vmmig-lnx-v2-ubuntu1804-g2 | Standard_DS2_v2 (DSv2) | Ubuntu 18.04 LTS | 2 | Standard |
+| vmmig-lnx-v3-ubuntu2004-tl | Standard_D2s_v3 (Dsv3) | Ubuntu 20.04 LTS | 2 | Trusted Launch |
+| vmmig-win-v1-ws2016-g1 | Standard_F2s (Fsv1) | Windows Server 2016 (10.0.14393) | 1 | Standard |
+| vmmig-win-v2-ws2019-g2 | Standard_DS2_v2 (DSv2) | Windows Server 2019 (10.0.17763) | 2 | Standard |
+| vmmig-win-v3-ws2022-tl | Standard_D2s_v3 (Dsv3) | Windows Server 2022 (10.0.20348) | 2 | Trusted Launch |
 
+Ubuntu 16.04 is the oldest image the Marketplace still offers in swedencentral (14.04 is only available as Ubuntu Pro). Older guest OSes are deliberate: they show how OS age affects the migration (NVMe/driver support, Gen1, security type).
 Verify:
 
 ```powershell
@@ -153,9 +153,9 @@ With the server running (`npm start` in another window):
 
 ```powershell
 .\scripts\Invoke-VmDiscovery.ps1 -RetiringOnly
-.\scripts\Invoke-VmPreCheck.ps1  -VmName vmmig-lnx-dsv3-g2-data          # exit code 2 if BLOCK
-.\scripts\Invoke-VmMigration.ps1 -VmName vmmig-lnx-dsv3-g2-data -DryRun
-.\scripts\Invoke-VmMigration.ps1 -VmName vmmig-lnx-dsv3-g2-data
+.\scripts\Invoke-VmPreCheck.ps1  -VmName vmmig-lnx-v3-ubuntu2004-tl          # exit code 2 if BLOCK
+.\scripts\Invoke-VmMigration.ps1 -VmName vmmig-lnx-v3-ubuntu2004-tl -DryRun
+.\scripts\Invoke-VmMigration.ps1 -VmName vmmig-lnx-v3-ubuntu2004-tl
 # rebuild strategy (Windows temp disk / Gen1): add  -Strategy Rebuild -ConfirmRebuild
 ```
 

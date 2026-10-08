@@ -65,4 +65,4 @@ npm run lint; npm run typecheck; npm test; npm run build
 
 ## Status
 
-Phase 1 is implemented and validated live on the demo fleet (8 VMs, see the test report). Owner: Jan G. An AI squad is configured in `.squad/` (see `.squad/team.md`).
+Phase 1 is implemented and validated live on the demo fleet (originally 8 VMs, see the test report). Owner: Jan G. An AI squad is configured in `.squad/` (see `.squad/team.md`).

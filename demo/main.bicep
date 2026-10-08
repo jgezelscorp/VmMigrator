@@ -20,31 +20,27 @@ param enableAutoShutdown bool = true
 @description('Auto-shutdown time (HHmm, UTC).')
 param autoShutdownTime string = '1900'
 
-@description('VM fleet. gen = Hyper-V generation, os = linux|windows, avset/dataDisk = variants.')
+@description('VM fleet: 3 Linux + 3 Windows on v1/v2/v3 sizes. gen = Hyper-V generation, security = Standard|TrustedLaunch, image = key into the images map.')
 param vms array = [
-  { name: 'lnx-dsv3-g2-data', size: 'Standard_D2s_v3', os: 'linux', gen: 2, dataDisk: true, avset: false }
-  { name: 'win-dsv3-g2', size: 'Standard_D2s_v3', os: 'windows', gen: 2, dataDisk: false, avset: false }
-  { name: 'lnx-dsv3-g1', size: 'Standard_D2s_v3', os: 'linux', gen: 1, dataDisk: false, avset: false }
-  { name: 'lnx-dsv2-g2-avs1', size: 'Standard_DS2_v2', os: 'linux', gen: 2, dataDisk: false, avset: true }
-  { name: 'lnx-dsv2-g2-avs2', size: 'Standard_DS2_v2', os: 'linux', gen: 2, dataDisk: false, avset: true }
-  { name: 'win-esv3-g2', size: 'Standard_E2s_v3', os: 'windows', gen: 2, dataDisk: false, avset: false }
-  { name: 'lnx-av2-g1', size: 'Standard_A2_v2', os: 'linux', gen: 1, dataDisk: false, avset: false }
-  { name: 'lnx-fsv2-g2', size: 'Standard_F2s_v2', os: 'linux', gen: 2, dataDisk: false, avset: false }
+  { name: 'lnx-v1-ubuntu1604-g1', size: 'Standard_F2s', os: 'linux', image: 'ubuntu1604', gen: 1, security: 'Standard', dataDisk: false, avset: false }
+  { name: 'lnx-v2-ubuntu1804-g2', size: 'Standard_DS2_v2', os: 'linux', image: 'ubuntu1804', gen: 2, security: 'Standard', dataDisk: false, avset: false }
+  { name: 'lnx-v3-ubuntu2004-tl', size: 'Standard_D2s_v3', os: 'linux', image: 'ubuntu2004', gen: 2, security: 'TrustedLaunch', dataDisk: false, avset: false }
+  { name: 'win-v1-ws2016-g1', size: 'Standard_F2s', os: 'windows', image: 'ws2016', gen: 1, security: 'Standard', dataDisk: false, avset: false }
+  { name: 'win-v2-ws2019-g2', size: 'Standard_DS2_v2', os: 'windows', image: 'ws2019', gen: 2, security: 'Standard', dataDisk: false, avset: false }
+  { name: 'win-v3-ws2022-tl', size: 'Standard_D2s_v3', os: 'windows', image: 'ws2022', gen: 2, security: 'TrustedLaunch', dataDisk: false, avset: false }
 ]
 
 var tags = { purpose: 'vm-migrator-demo' }
 
+// Oldest/second/third Ubuntu LTS and WS2016/2019/2022 so the OS-age impact on migration is visible.
 var images = {
-  linux: {
-    '1': { publisher: 'Canonical', offer: '0001-com-ubuntu-server-jammy', sku: '22_04-lts', version: 'latest' }
-    '2': { publisher: 'Canonical', offer: '0001-com-ubuntu-server-jammy', sku: '22_04-lts-gen2', version: 'latest' }
-  }
-  windows: {
-    '1': { publisher: 'MicrosoftWindowsServer', offer: 'WindowsServer', sku: '2022-datacenter', version: 'latest' }
-    '2': { publisher: 'MicrosoftWindowsServer', offer: 'WindowsServer', sku: '2022-datacenter-g2', version: 'latest' }
-  }
+  ubuntu1604: { '1': { publisher: 'Canonical', offer: 'UbuntuServer', sku: '16.04-LTS', version: 'latest' } }
+  ubuntu1804: { '2': { publisher: 'Canonical', offer: 'UbuntuServer', sku: '18_04-lts-gen2', version: 'latest' } }
+  ubuntu2004: { '2': { publisher: 'Canonical', offer: '0001-com-ubuntu-server-focal', sku: '20_04-lts-gen2', version: 'latest' } }
+  ws2016: { '1': { publisher: 'MicrosoftWindowsServer', offer: 'WindowsServer', sku: '2016-Datacenter', version: 'latest' } }
+  ws2019: { '2': { publisher: 'MicrosoftWindowsServer', offer: 'WindowsServer', sku: '2019-datacenter-gensecond', version: 'latest' } }
+  ws2022: { '2': { publisher: 'MicrosoftWindowsServer', offer: 'WindowsServer', sku: '2022-datacenter-g2', version: 'latest' } }
 }
-
 var inboundRules = empty(operatorIp) ? [] : [
   {
     name: 'allow-operator-ssh-rdp'
@@ -144,8 +140,12 @@ resource vmRes 'Microsoft.Compute/virtualMachines@2023-09-01' = [for (vm, i) in 
       linuxConfiguration: vm.os == 'linux' ? { disablePasswordAuthentication: false } : null
       windowsConfiguration: vm.os == 'windows' ? { enableAutomaticUpdates: true } : null
     }
+    securityProfile: vm.security == 'TrustedLaunch' ? {
+      securityType: 'TrustedLaunch'
+      uefiSettings: { secureBootEnabled: true, vTpmEnabled: true }
+    } : null
     storageProfile: {
-      imageReference: images[vm.os]['${vm.gen}']
+      imageReference: images[vm.image]['${vm.gen}']
       osDisk: {
         createOption: 'FromImage'
         deleteOption: 'Delete'
