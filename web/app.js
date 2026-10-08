@@ -117,7 +117,12 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
         row('Increase from 1 Feb 2027', upl(c.currentUpliftKind, c.currentUpliftPct), upl(c.proposedUpliftKind, c.proposedUpliftPct)),
         row('Monthly (from 1 Feb 2027)', money(c.currentMonthlyWithUplift), money(c.proposedMonthlyWithUplift))));
     $('sku-info-title').textContent = `SKU comparison: ${a.vmName}`;
+    const checks = [a.quota.status === 'ok', a.zones.status === 'ok'];
+    const blocked = a.quota.status === 'insufficient' || a.zones.status === 'constrained';
+    const passed = checks.filter(Boolean).length;
+    const [lvl, txt] = blocked ? ['BLOCK', 'Blocked'] : passed === checks.length ? ['PASS', 'All checks passed'] : ['WARN', `${passed} of ${checks.length} checks passed`];
     $('sku-info-body').replaceChildren(
+      h('p', {}, badge(lvl, txt), ` Details surface in the pre-check phase.`),
       cmp,
       h('h4', {}, 'Quota ', badge(a.quota.status === 'ok' ? 'PASS' : a.quota.status === 'insufficient' ? 'BLOCK' : 'WARN', a.quota.status)),
       h('p', {}, a.quota.message),
