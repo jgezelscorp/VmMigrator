@@ -23,6 +23,7 @@
           <input id="sub-text" type="text" placeholder="or paste subscription id" aria-label="Subscription id" />
           <button id="btn-detect" type="button">Auto-detect retiring VMs</button>
           <button id="btn-all" type="button" class="secondary">Show all VMs</button>
+<button id="btn-auto-sku" type="button" disabled>Auto-SKU Selection</button>
 <button id="btn-report" type="button" class="secondary" disabled>Download HTML report</button>
         </div>
         <div class="row">
@@ -76,6 +77,12 @@
         </ul>
       </section>
     </main>
+
+    <dialog id="sku-info" aria-labelledby="sku-info-title">
+      <h2 id="sku-info-title">SKU comparison</h2>
+      <div id="sku-info-body"></div>
+      <div class="row end"><button id="sku-info-close" type="button" class="secondary">Close</button></div>
+    </dialog>
 
     <dialog id="confirm" aria-labelledby="confirm-title">
       <form method="dialog">

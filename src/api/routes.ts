@@ -129,6 +129,12 @@ export function buildApp(opts: BuildOptions = {}): FastifyInstance {
     return { results };
   });
 
+  app.post('/api/vms/sku-advice', async (req) => {
+    const ids = vmIdsOf(req.body);
+    const vms = await mapLimit(ids, 3, async (id) => ctx.getVm(id));
+    return { advice: await ctx.advise(vms) };
+  });
+
   app.post('/api/migrations', async (req, reply) => {
     const ids = vmIdsOf(req.body);
     const overrides = overridesOf(req.body);

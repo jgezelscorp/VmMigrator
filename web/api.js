@@ -29,6 +29,9 @@ export function createApi({ baseUrl = '', fetchImpl = (...a) => fetch(...a) } = 
     async precheck(vmIds, targetOverrides = {}, strategy) {
       return list(await http('POST', '/api/vms/precheck', { vmIds, targetOverrides, ...(strategy ? { strategy } : {}) }), 'results');
     },
+    async skuAdvice(vmIds) {
+      return list(await http('POST', '/api/vms/sku-advice', { vmIds }), 'advice');
+    },
     async startMigration({ vmIds, dryRun, targetOverrides = {}, options }) {
       const res = await http('POST', '/api/migrations', { vmIds, dryRun, targetOverrides, ...(options ? { options } : {}) });
       return Array.isArray(res) ? res : res.jobs ?? [res];

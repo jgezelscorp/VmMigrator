@@ -48,6 +48,22 @@ export function createFakeApi({ tickMs = 10 } = {}) {
         return { vmId, targetSku: targetOverrides[vmId] ?? c.targetSku ?? suggest(vm), overall, checks: c.checks, ranAt: new Date().toISOString() };
       });
     },
+    async skuAdvice(vmIds) {
+      const vms = fixture('vms.json').vms;
+      return vmIds.map((vmId) => {
+        const vm = vms.find((v) => v.id === vmId);
+        const spec = (name, vcpus) => ({ name, family: 'x', vcpus, memoryGb: 8, tempDiskMB: 0, generations: ['V2'], diskControllers: ['SCSI'], acceleratedNetworking: true, premiumIO: true });
+        return {
+          vmId, vmName: vm?.name ?? '', location: 'northeurope', osType: 'Linux', hasIssues: false, alternatives: [],
+          current: spec(vm?.vmSize ?? 'old', 2), proposed: spec('Standard_D2as_v7', 2),
+          quota: { status: 'ok', message: 'Quota OK.' },
+          zones: { status: 'ok', vmZones: [], offeredZones: ['1'], message: 'No zone constraints.' },
+          cost: { status: 'ok', upliftPct: 17, currentMonthly: 100, proposedMonthly: 90, deltaPct: -10, currentMonthlyWithUplift: 117, proposedMonthlyWithUplift: 105.3, deltaPctWithUplift: -10, message: 'Cheaper.' },
+          reservation: { status: 'none', matches: [], advice: 'No reservations found.' },
+          notes: [],
+        };
+      });
+    },
     async startMigration({ vmIds, dryRun, targetOverrides = {} }) {
       const vms = list(fixture('vms.json'), 'vms');
       return vmIds.map((vmId) => {

@@ -136,6 +136,27 @@ describe('web UI rebuild opt-in', () => {
     expect((started[0] as { options: unknown }).options).toEqual({ strategy: 'rebuild', confirmRebuild: true });
   });
 
+  it('auto-selects SKUs first in the dropdown and shows a comparison popup', async () => {
+    await bootstrap();
+    expect($('btn-auto-sku').disabled).toBe(true);
+    $('btn-all').click();
+    await tick(60);
+    expect($('btn-auto-sku').disabled).toBe(false);
+    $('btn-auto-sku').click();
+    await tick(60);
+    const sel = document.querySelector('#vm-table tbody select') as HTMLSelectElement;
+    expect(sel.options[0]!.value).toBe('Standard_D2as_v7');
+    const info = document.querySelector('#vm-table tbody .info-btn') as HTMLButtonElement;
+    expect(info.disabled).toBe(false);
+    info.click();
+    expect($('sku-info').hasAttribute('open')).toBe(true);
+    const text = $('sku-info-body').textContent!;
+    expect(text).toContain('Quota');
+    expect(text).toContain('Zones');
+    expect(text).toContain('+17% regional uplift');
+    expect(text).toContain('No reservations found.');
+  });
+
   it('downloads a standalone HTML report of the estate', async () => {
     const ctx = await bootstrap();
     $('btn-all').click();

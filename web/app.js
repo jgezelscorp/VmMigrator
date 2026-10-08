@@ -27,7 +27,7 @@ export function suggestTarget(vm) {
 export function init(doc, { pollMs = POLL_MS, api } = {}) {
   const $ = (id) => doc.getElementById(id);
   const client = api ?? createApi();
-  const state = { vms: [], selected: new Set(), targets: {}, prechecks: {}, polling: new Map(), jobs: new Map(), rebuild: new Set() };
+  const state = { vms: [], selected: new Set(), targets: {}, prechecks: {}, polling: new Map(), jobs: new Map(), rebuild: new Set(), advice: {} };
 
   const showError = (e) => { $('error').hidden = !e; $('error').textContent = e ? (e.message ?? String(e)) : ''; };
   const subId = () => $('sub-text').value.trim() || $('sub').value;
@@ -56,6 +56,8 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
         state.vms = await client.listVms({ subscriptionId: subId(), retiringOnly });
         state.selected.clear();
         state.prechecks = {};
+        state.advice = {};
+        state.targets = {};
         state.rebuild.clear();
         $('precheck').replaceChildren();
         renderTable();
@@ -72,11 +74,69 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
 
   function skuSelect(vm) {
     const current = state.targets[vm.id] ?? state.prechecks[vm.id]?.targetSku ?? suggestTarget(vm);
-    const opts = [...new Set([current, ...SKU_CHOICES])];
-    return h('select', {
+    const adv = state.advice[vm.id]?.proposed?.name;
+    const opts = [...new Set([...(adv ? [adv] : []), current, ...SKU_CHOICES])];
+    const sel = h('select', {
       'aria-label': `Target SKU for ${vm.name}`,
       onchange: (e) => { state.targets[vm.id] = e.target.value; delete state.prechecks[vm.id]; state.rebuild.delete(vm.id); updateButtons(); },
     }, opts.map((s) => h('option', { value: s, selected: s === current }, s)));
+    const info = h('button', {
+      type: 'button', class: 'info-btn', title: 'Compare with proposed SKU', 'aria-label': `SKU details for ${vm.name}`,
+      disabled: !state.advice[vm.id], onclick: () => showSkuInfo(vm.id),
+    }, 'ℹ');
+    return h('div', { class: 'sku-cell' }, sel, info);
+  }
+
+  const money = (n) => (n == null ? 'n/a' : `$${n.toFixed(2)}`);
+  const pct = (n) => (n == null ? 'n/a' : `${n > 0 ? '+' : ''}${n.toFixed(1)}%`);
+
+  function showSkuInfo(id) {
+    const a = state.advice[id];
+    if (!a) return;
+    const c = a.cost;
+    const sc = a.current, sp = a.proposed;
+    const row = (label, x, y) => h('tr', {}, h('th', {}, label), h('td', {}, x ?? '—'), h('td', {}, y ?? '—'));
+    const cmp = h('table', { class: 'cmp' },
+      h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Current'), h('th', {}, 'Proposed'))),
+      h('tbody', {},
+        row('SKU', sc?.name ?? state.vms.find((v) => v.id === id)?.vmSize, sp?.name),
+        row('vCPUs', sc?.vcpus, sp?.vcpus),
+        row('Memory (GB)', sc?.memoryGb, sp?.memoryGb),
+        row('Temp disk (MB)', sc?.tempDiskMB, sp?.tempDiskMB),
+        row('Generations', sc?.generations.join(', '), sp?.generations.join(', ')),
+        row('Disk controller', sc?.diskControllers.join(', '), sp?.diskControllers.join(', ')),
+        row('Accelerated networking', sc ? String(sc.acceleratedNetworking) : '', sp ? String(sp.acceleratedNetworking) : ''),
+        row('Monthly (list)', money(c.currentMonthly), money(c.proposedMonthly)),
+        row(`Monthly (+${c.upliftPct}% regional uplift)`, money(c.currentMonthlyWithUplift), money(c.proposedMonthlyWithUplift))));
+    $('sku-info-title').textContent = `SKU comparison: ${a.vmName}`;
+    $('sku-info-body').replaceChildren(
+      cmp,
+      h('h4', {}, 'Quota ', badge(a.quota.status === 'ok' ? 'PASS' : a.quota.status === 'insufficient' ? 'BLOCK' : 'WARN', a.quota.status)),
+      h('p', {}, a.quota.message),
+      h('h4', {}, 'Zones ', badge(a.zones.status === 'ok' ? 'PASS' : a.zones.status === 'constrained' ? 'BLOCK' : 'WARN', a.zones.status)),
+      h('p', {}, a.zones.message),
+      h('h4', {}, 'Financial impact'),
+      h('p', {}, c.message, c.deltaPct != null ? ` List price ${pct(c.deltaPct)}; with regional uplift ${pct(c.deltaPctWithUplift)}.` : ''),
+      h('h4', {}, 'Reservations ', badge(a.reservation.status === 'found' ? 'WARN' : 'PASS', a.reservation.status)),
+      h('p', {}, a.reservation.advice),
+      a.reservation.matches.length ? h('ul', {}, a.reservation.matches.map((m) => h('li', {}, `${m.name}: ${m.sku} x${m.quantity ?? '?'} (${m.match})${m.expiry ? `, expires ${m.expiry}` : ''}`))) : '',
+      a.notes.length ? h('ul', {}, a.notes.map((n) => h('li', {}, n))) : '');
+    const d = $('sku-info');
+    if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
+  }
+
+  async function autoSku() {
+    showError(null);
+    await busy([$('btn-auto-sku')], $('load-bar'), async () => {
+      try {
+        const advice = await client.skuAdvice(state.vms.map((v) => v.id));
+        for (const a of advice) {
+          state.advice[a.vmId] = a;
+          if (a.proposed) { state.targets[a.vmId] = a.proposed.name; delete state.prechecks[a.vmId]; state.rebuild.delete(a.vmId); }
+        }
+        renderTable();
+      } catch (e) { showError(e); }
+    });
   }
 
   function renderTable() {
@@ -108,6 +168,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     lock('btn-precheck', !any);
     lock('btn-dry', !any);
     lock('btn-report', state.vms.length === 0);
+    lock('btn-auto-sku', state.vms.length === 0);
     lock('btn-migrate', !any || !prechecked() || blocked());
     $('btn-migrate').title = !any ? 'Select VMs first' : !prechecked() ? 'Run pre-check first' : blocked() ? 'Blocked VMs selected' : '';
   }
@@ -257,6 +318,8 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   $('btn-report').onclick = downloadReport;
+  $('btn-auto-sku').onclick = autoSku;
+  $('sku-info-close').onclick = () => { const d = $('sku-info'); if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); };
   $('btn-precheck').onclick = runPrecheck;
   $('btn-dry').onclick = () => startMigration(true);
   $('btn-migrate').onclick = () => startMigration(false);
@@ -264,6 +327,6 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
   return client.listSubscriptions().then((subs) => {
     $('sub').replaceChildren(...subs.map((s) => h('option', { value: s.id ?? s.subscriptionId }, s.name ?? s.displayName ?? s.id)));
     renderTable();
-    return { state, load, runPrecheck, startMigration, downloadReport };
+    return { state, load, runPrecheck, startMigration, downloadReport, autoSku };
   });
 }
