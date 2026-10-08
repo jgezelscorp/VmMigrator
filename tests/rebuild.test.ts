@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ArmError } from '../src/azure/arm.js';
 import { MigrationRefusedError } from '../src/migration/index.js';
-import { buildRawVm, createDemoFakeArm } from '../src/mock/fleet.js';
+import { buildRawVm, createDemoFakeArm } from './helpers/fleet.js';
 import { makeEnv, passingPostCheck, vmIdOf } from './helpers/migrationEnv.js';
 
 const WIN_TARGET = 'Standard_D2as_v7';

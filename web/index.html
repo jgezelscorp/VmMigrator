@@ -10,7 +10,6 @@
     <a class="skip" href="#main">Skip to content</a>
     <header class="topbar">
       <h1><span class="logo" aria-hidden="true">&#9889;</span> VmMigrator <small>VM lifecycle factory</small></h1>
-      <span id="mock-badge" class="badge warn" hidden>MOCK MODE</span>
       <span class="auth" title="Authentication placeholder (Entra sign-in is tracked in #11)">&#9679; Signed in via Azure CLI</span>
     </header>
     <div id="global-bar" class="bar indeterminate global" role="progressbar" aria-label="Working" hidden><span></span></div>
@@ -92,7 +91,7 @@
 
     <script type="module">
       import { init } from './app.js';
-      init(document, new URLSearchParams(location.search).get('mock') === '1');
+      init(document);
     </script>
   </body>
 </html>

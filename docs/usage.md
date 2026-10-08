@@ -5,14 +5,13 @@
 ```powershell
 npm install
 npm start                      # http://127.0.0.1:3000 (loopback only); PORT overrides the port
-$env:VMM_MOCK = '1'; npm start # demo mode: stateful fake ARM with a 5-VM fleet, no Azure calls
 ```
 
-Live mode uses your `az login` session (read access to VMs/disks/networks, write on the VMs and snapshot
+The app always talks to real Azure and uses your `az login` session (read access to VMs/disks/networks, write on the VMs and snapshot
 rights in the VM resource group). Without a login the API answers `401 NotLoggedIn` with instructions.
 Open `http://127.0.0.1:3000/` for the web UI (served from `/web`).
 
-Environment: `PORT`, `VMM_MOCK=1`, `VMM_DATA_DIR` (catalog + `jobs/` state), `VMM_JOBS_DIR` (job state only).
+Environment: `PORT`, `VMM_DATA_DIR` (catalog + `jobs/` state), `VMM_JOBS_DIR` (job state only).
 Job state is one JSON file per migration under `data/jobs/`; incomplete jobs resume on restart (steps are idempotent).
 
 ## Migration flow
@@ -53,7 +52,7 @@ v7. When that is the case the pre-check still BLOCKs by default but offers `rebu
 
 | Method + path | Body / query | Response |
 |---|---|---|
-| `GET /api/health` | | `{status:'ok', mock}` |
+| `GET /api/health` | | `{status:'ok'}` |
 | `GET /api/openapi.json` | | OpenAPI summary |
 | `GET /api/subscriptions` | | `{subscriptions:[{id,name}]}` |
 | `GET /api/vms` | `subscriptionId` (comma list), `retiring=true` | `{vms: VmInfo[]}` |

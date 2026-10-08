@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { getVm } from '../src/discovery/discovery.js';
 import { createPostCheckHook } from '../src/postchecks/index.js';
-import { FakeArm } from '../src/mock/fakeArm.js';
+import { FakeArm } from './helpers/fakeArm.js';
 import { catalog, makeEnv, vmIdOf } from './helpers/migrationEnv.js';
-import { createDemoFakeArm } from '../src/mock/fleet.js';
+import { createDemoFakeArm } from './helpers/fleet.js';
 
 const hookFor = (arm: FakeArm) =>
   createPostCheckHook({

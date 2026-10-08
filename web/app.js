@@ -23,11 +23,10 @@ export function suggestTarget(vm) {
   return fam === 'F' ? 'Standard_F2s_v2' : `Standard_${fam}2s_v6`;
 }
 
-export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
+export function init(doc, { pollMs = POLL_MS, api } = {}) {
   const $ = (id) => doc.getElementById(id);
-  const client = api ?? createApi({ mock });
+  const client = api ?? createApi();
   const state = { vms: [], selected: new Set(), targets: {}, prechecks: {}, polling: new Map(), jobs: new Map(), rebuild: new Set() };
-  if (mock) $('mock-badge').hidden = false;
 
   const showError = (e) => { $('error').hidden = !e; $('error').textContent = e ? (e.message ?? String(e)) : ''; };
   const subId = () => $('sub-text').value.trim() || $('sub').value;
@@ -116,12 +115,12 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
       const r = state.prechecks[id];
       const vm = state.vms.find((v) => v.id === id);
       if (!r) return '';
-      const canRebuild = r.rebuildAvailable || r.strategy === 'rebuild';
+      const canRebuild = r.overall !== 'BLOCK' || r.rebuildAvailable || r.strategy === 'rebuild';
       return h('div', { class: 'card' },
         h('h3', {}, vm?.name ?? id, ' → ', r.targetSku, ' ', badge(r.overall), r.strategy === 'rebuild' ? ' (rebuild)' : ''),
         canRebuild ? h('label', { class: 'rebuild-opt' },
           h('input', { type: 'checkbox', 'aria-label': `Use rebuild strategy for ${vm?.name ?? id}`, checked: state.rebuild.has(id), onchange: (e) => toggleRebuild(id, e.target.checked) }),
-          ' Use rebuild strategy (opt-in): the VM is deleted and recreated from its disks, causing longer downtime') : '',
+          (r.rebuildAvailable ? ' Recommended: use' : ' Use') + ' rebuild strategy (opt-in): the VM is deleted and recreated from its disks, causing longer downtime') : '',
         h('ul', {}, r.checks.map((c) => h('li', {}, badge(c.status), ` ${c.checkId}: ${c.message}`,
           c.remediation ? h('div', { class: 'remed' }, `Remediation: ${c.remediation}`) : ''))));
     }));

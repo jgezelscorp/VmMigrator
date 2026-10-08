@@ -24,14 +24,6 @@ npm start          # http://127.0.0.1:3000 (loopback only); PORT overrides the p
 
 Open <http://127.0.0.1:3000/> for the web UI. Without a login the API answers `401 NotLoggedIn`.
 
-### Mock mode (no Azure needed)
-
-```powershell
-$env:VMM_MOCK = '1'; npm start
-```
-
-Serves a stateful fake ARM with a 5-VM fleet; nothing leaves your machine.
-
 ### Demo fleet: deploy and clean up
 
 ```powershell

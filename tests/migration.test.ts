@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { ArmError } from '../src/azure/arm.js';
 import type { MigrationJob } from '../src/domain/types.js';
 import { FileJobStore, InvalidJobStateError, MemoryJobStore, MigrationEngine, MigrationRefusedError } from '../src/migration/index.js';
-import { buildRawVm } from '../src/mock/fleet.js';
-import { createDemoFakeArm } from '../src/mock/fleet.js';
+import { buildRawVm } from './helpers/fleet.js';
+import { createDemoFakeArm } from './helpers/fleet.js';
 import { makeEnv, passingPostCheck, vmIdOf } from './helpers/migrationEnv.js';
 
 const writes = (arm: { calls: { method: string }[] }): { method: string; path: string; body?: unknown }[] =>

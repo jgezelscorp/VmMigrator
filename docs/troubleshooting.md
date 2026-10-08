@@ -32,4 +32,3 @@ Based on the live end-to-end run in [test-report.md](test-report.md).
 - Job details: `GET /api/migrations/:id` (`events`, `error`, `postCheck`, `rollback`); live stream: `GET /api/migrations/:id/events`.
 - After a failed resize Azure can show the requested size in the VM model while the VM still runs the old one; post-checks read the actual state, verify with `az vm get-instance-view`.
 - Check SKU capabilities directly: `az vm list-skus -l <region> --size <sku> --resource-type virtualMachines` (look at `DiskControllerTypes`, `HyperVGenerations`, `MaxResourceVolumeMB`, restrictions) and image support with `az vm image show --urn <URN>`.
-- Try `VMM_MOCK=1` to separate tool issues from Azure issues.

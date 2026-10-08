@@ -1,12 +1,7 @@
 # HowTo: test-drive VM-Migrator from your own device
 
 This guide takes you from a clean machine to migrating Azure VMs from retiring v1/v2/v3 sizes to v7 (v6 as fallback).
-There are two paths:
-
-- **Path A – Mock mode (5 minutes, free):** a fake Azure with 5 VMs. Nothing is touched in Azure.
-- **Path B – Live mode (about 1 hour, costs money):** deploys a real demo fleet in *your* subscription and migrates it.
-
-Start with Path A to learn the UI, then do Path B.
+It deploys a real demo fleet in *your* subscription (about 1 hour, costs money) and migrates it. The app always works against real Azure.
 
 ---
 
@@ -17,9 +12,9 @@ Start with Path A to learn the UI, then do Path B.
 | Git | any recent | `git --version` |
 | Node.js | 20 or newer | `node --version` |
 | PowerShell | 7+ recommended (5.1 works for the demo scripts) | `$PSVersionTable.PSVersion` |
-| Azure CLI | 2.60+ (Path B only) | `az version` |
-| Azure subscription | Path B only. Role **Owner**, or **Contributor** plus **User Access Administrator**, on a subscription or resource group | `az role assignment list --assignee <you>` |
-| VM quota | Path B only, about 12 vCPUs across Fsv1, DSv2, Dsv3 in one region | see section 6 |
+| Azure CLI | 2.60+ (demo deploy only) | `az version` |
+| Azure subscription | demo deploy only. Role **Owner**, or **Contributor** plus **User Access Administrator**, on a subscription or resource group | `az role assignment list --assignee <you>` |
+| VM quota | demo deploy only, about 12 vCPUs across Fsv1, DSv2, Dsv3 in one region | see section 3.2 |
 
 > The repo is private: `gh auth login` (or any Git credential) with access to `jgezelscorp/VmMigrator` is required to clone.
 
@@ -32,29 +27,9 @@ npm install
 npm test        # optional sanity check, all tests should pass
 ```
 
-## 3. Path A – Mock mode
+## 3. Deploy the demo and migrate
 
-```powershell
-$env:VMM_MOCK = '1'
-npm start
-```
-
-Open <http://127.0.0.1:3000/>. The server listens on loopback only.
-
-Try this:
-
-1. The **Discover** view lists a 5-VM fake fleet; retiring sizes are flagged.
-2. Select one or more VMs (or use *Select all retiring*).
-3. Click **Pre-check**. Each VM shows PASS / WARN / BLOCK checks and a proposed v7 target SKU. You can override the target.
-4. Click **Migrate** (try **Dry run** first). Watch the live step timeline:
-   Validated, SnapshotTaken, Deallocated, Updated, Started, PostChecked, Done.
-5. Open a finished job and try **Rollback** and **Cleanup snapshots**.
-
-Stop with `Ctrl+C`. Remove the variable afterwards: `Remove-Item Env:VMM_MOCK`.
-
-## 4. Path B – Live mode
-
-### 4.1 Sign in and pick a subscription
+### 3.1 Sign in and pick a subscription
 
 ```powershell
 az login                                   # use --tenant <tenant-id> if you have several
@@ -65,7 +40,7 @@ az account show -o table                   # confirm you are on the right one
 The app uses your `az login` session (Entra sign-in in the app itself is planned for phase 2). Everything below
 runs with your identity, so only use a subscription you are allowed to change.
 
-### 4.2 Pre-flight: quota and SKU availability
+### 3.2 Pre-flight: quota and SKU availability
 
 Since mid-2026 new quota for v1/v2/v3 families is restricted. Check the region you plan to use:
 
@@ -79,7 +54,7 @@ If a family has no quota, pick another region (`westeurope`, `northeurope`, `eas
 The **target** v7 family also needs quota (for example Dasv7/Dsv7 for the D-series). Request it in the portal
 (*Subscriptions, Usage + quotas*) if it is 0.
 
-### 4.3 Deploy the demo fleet
+### 3.3 Deploy the demo fleet
 
 ```powershell
 .\demo\deploy.ps1 -WhatIf                                   # preview only, creates nothing
@@ -114,25 +89,23 @@ Verify:
 az vm list -g rg-vmmigrator-demo -d -o table
 ```
 
-### 4.4 Start the app in live mode
-
-Make sure `VMM_MOCK` is **not** set, then:
+### 3.4 Start the app
 
 ```powershell
-Remove-Item Env:VMM_MOCK -ErrorAction SilentlyContinue
 npm start
 ```
 
 Open <http://127.0.0.1:3000/>. If you see `401 NotLoggedIn`, run `az login` again and refresh.
 
-### 4.5 Migrate through the web UI
+### 3.5 Migrate through the web UI
 
 1. Choose your subscription. Use **Auto-detect** (retiring VMs only) or select VMs manually.
 2. Click **Pre-check** and read the results:
    - **PASS / WARN**: ready to go.
-   - **BLOCK**: cannot be done in place. For Windows VMs with a temp disk and for Gen1 VMs the card offers
-     **Use rebuild strategy**; ticking it turns those blocks into warnings (this recreates the VM or upgrades it to
-     Trusted Launch; expect extra downtime, and read the confirmation text).
+   - **Migration path**: every pre-checked VM card has a **Use rebuild strategy (opt-in)** checkbox. Leave it off for an
+     in-place resize. Tick it to delete and recreate the VM from its disks (longer downtime); it also turns in-place
+     blocks (Windows temp disk, Gen1) into warnings. It is marked *Recommended* when an in-place resize is blocked.
+   - **BLOCK**: cannot be done in place; tick the rebuild checkbox if offered.
 3. Optionally override the target SKU (default is the matching v7 size, with v6 as fallback).
 4. Start with **Dry run**, then run the real **Migrate**. For each VM the engine:
    re-validates, snapshots the disks, deallocates, resizes (and switches the disk controller to NVMe when needed),
@@ -147,7 +120,7 @@ Confirm in Azure:
 az vm list -g rg-vmmigrator-demo --query '[].{name:name,size:hardwareProfile.vmSize}' -o table
 ```
 
-### 4.6 Same thing from PowerShell or REST
+### 3.6 Same thing from PowerShell or REST
 
 With the server running (`npm start` in another window):
 
@@ -161,7 +134,7 @@ With the server running (`npm start` in another window):
 
 See `docs/usage.md` for all parameters and the REST API (`/api/vms`, `/api/migrations`, ...).
 
-### 4.7 Run it again (reset)
+### 3.7 Run it again (reset)
 
 ```powershell
 .\demo\rebuild.ps1               # delete the resource group, wait, redeploy the original v1/v2/v3 fleet
@@ -170,7 +143,7 @@ See `docs/usage.md` for all parameters and the REST API (`/api/vms`, `/api/migra
 
 Takes 10-20 minutes and prints a **new** admin password.
 
-### 4.8 Clean up (important, stops the billing)
+### 3.8 Clean up (important, stops the billing)
 
 ```powershell
 .\demo\cleanup.ps1               # deletes rg-vmmigrator-demo, only if tagged purpose=vm-migrator-demo
@@ -179,7 +152,7 @@ Takes 10-20 minutes and prints a **new** admin password.
 Also delete leftovers outside the group if you pointed the tool at your own VMs (snapshots, old OS disks kept by the
 rebuild strategy; use **Cleanup snapshots** in the UI first).
 
-## 5. Cost
+## 4. Cost
 
 Rough estimates, verify with the Azure pricing calculator:
 
@@ -189,13 +162,13 @@ Rough estimates, verify with the Azure pricing calculator:
 
 Do the test in an afternoon and run `cleanup.ps1` when you are done.
 
-## 6. Troubleshooting
+## 5. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | `401 NotLoggedIn` in the UI/API | `az login`, then retry. Check `az account show`. |
 | `az` login blocked by your corporate tenant policy | Use `az login --use-device-code --tenant <tenant-id>` with an account in a tenant you control. |
-| Deploy fails with `QuotaExceeded` or `NotAvailableForSubscription` | Change `-Location`, use `-Series` to drop the failing series, or request quota (section 4.2). |
+| Deploy fails with `QuotaExceeded` or `NotAvailableForSubscription` | Change `-Location`, use `-Series` to drop the failing series, or request quota (section 3.2). |
 | Pre-check BLOCK on target SKU unavailable | Pick another target via the override, another region's quota, or request v7 quota. |
 | Migration fails on a Windows temp-disk VM | Expected for in-place. Re-run pre-check and tick **Use rebuild strategy**. |
 | Gen1 VM blocked | Use the rebuild strategy (Linux Gen1 with Canonical/RedHat/SUSE images only). |
@@ -205,7 +178,7 @@ Do the test in an afternoon and run `cleanup.ps1` when you are done.
 
 More detail: `docs/troubleshooting.md`, `docs/runbook.md`, `docs/sku-mapping.md`, `docs/architecture.md`.
 
-## 7. Limits to know
+## 6. Limits to know
 
 - Rebuild strategy: system-assigned identities get a new principal id, extensions with protected settings and
   Azure Disk Encryption are not restored, and temp-disk (D:) content is lost.

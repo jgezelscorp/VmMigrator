@@ -1,6 +1,6 @@
 # Migration runbook
 
-Moving VMs off retiring series with VM-Migrator. Commands assume a running server (`npm start`); the PowerShell wrappers in `scripts/` call the same API (see [usage.md](usage.md)). Try everything first on the demo fleet or with `VMM_MOCK=1`.
+Moving VMs off retiring series with VM-Migrator. Commands assume a running server (`npm start`); the PowerShell wrappers in `scripts/` call the same API (see [usage.md](usage.md)). Try everything first on the demo fleet.
 
 ## In-place or rebuild?
 

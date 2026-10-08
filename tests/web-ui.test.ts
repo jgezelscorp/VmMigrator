@@ -5,26 +5,22 @@ import { describe, expect, it, vi } from 'vitest';
 // @ts-expect-error plain JS module without types
 import { init } from '../web/app.js';
 // @ts-expect-error plain JS module without types
-import { createApi } from '../web/api.js';
+import { createFakeApi } from './helpers/webFakeApi.js';
 
 const webDir = resolve(import.meta.dirname, '../web');
 
 async function bootstrap() {
   const html = readFileSync(resolve(webDir, 'index.html'), 'utf8');
   document.body.innerHTML = /<body>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script[\s\S]*?<\/script>/, '');
-  const fetchImpl = async (url: string) => ({
-    ok: true,
-    json: async () => JSON.parse(readFileSync(resolve(webDir, url), 'utf8')),
-  });
-  const api = createApi({ mock: true, fetchImpl, mockTickMs: 10 });
-  const ctx = await init(document, true, { pollMs: 5, api });
+  const api = createFakeApi({ tickMs: 10 });
+  const ctx = await init(document, { pollMs: 5, api });
   return ctx;
 }
 
 const $ = (id: string) => document.getElementById(id) as HTMLInputElement & HTMLButtonElement;
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 
-describe('web UI (mock mode)', () => {
+describe('web UI', () => {
   it('shows busy indicators while an action runs and a progress bar per migration job', async () => {
     await bootstrap();
     $('btn-detect').click();
@@ -113,7 +109,7 @@ describe('web UI rebuild opt-in', () => {
       getMigration: async () => { throw new Error('unused'); },
       rollback: async () => { throw new Error('unused'); },
     };
-    await init(document, false, { pollMs: 5, api });
+    await init(document, { pollMs: 5, api });
     $('btn-all').click();
     await tick();
     const cb = document.querySelector('#vm-table tbody input[type=checkbox]') as HTMLInputElement;

@@ -1,4 +1,4 @@
-import { ArmError } from '../azure/arm.js';
+import { ArmError } from '../../src/azure/arm.js';
 import { FakeArm } from './fakeArm.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
