@@ -148,7 +148,7 @@ export interface SkuAdvice {
     deltaPctWithUplift?: number;
     message: string;
   };
-  reservation: { status: 'found' | 'none' | 'unknown'; matches: ReservationMatch[]; advice: string };
+  reservation: { status: 'found' | 'none' | 'unknown'; matches: ReservationMatch[]; proposedMatches: ReservationMatch[]; advice: string };
   notes: string[];
 }
 
@@ -381,44 +381,46 @@ export class SkuAdvisor {
       return {
         status: 'unknown',
         matches: [],
-        advice: 'Reservations could not be read (missing Reservation Reader permission?). Check Cost Management > Reservations for a reservation covering this size before migrating.',
+        proposedMatches: [],
+        advice: 'Reservations could not be read (needs Reservation Reader). Check Cost Management > Reservations manually.',
       };
     }
     const loc = vm.location.toLowerCase();
-    const key = seriesKey(vm.vmSize);
-    const matches: ReservationMatch[] = [];
-    for (const r of reservations) {
-      const p = r.properties ?? {};
-      const sku = r.sku?.name;
-      if (!sku || (p.reservedResourceType && p.reservedResourceType !== 'VirtualMachines')) continue;
-      if (/expired|cancel|fail/i.test(p.displayProvisioningState ?? p.provisioningState ?? '')) continue;
-      if (r.location && r.location.toLowerCase().replace(/\s/g, '') !== loc) continue;
-      const exact = sku.toLowerCase() === vm.vmSize.toLowerCase();
-      if (!exact && seriesKey(sku) !== key) continue;
-      matches.push({
-        name: r.name ?? sku,
-        sku,
-        ...(p.quantity !== undefined ? { quantity: p.quantity } : {}),
-        ...(p.expiryDate ? { expiry: p.expiryDate } : {}),
-        match: exact ? 'exact' : 'series',
-      });
-    }
+    const find = (size: string): ReservationMatch[] => {
+      const key = seriesKey(size);
+      const found: ReservationMatch[] = [];
+      for (const r of reservations) {
+        const p = r.properties ?? {};
+        const sku = r.sku?.name;
+        if (!sku || (p.reservedResourceType && p.reservedResourceType !== 'VirtualMachines')) continue;
+        if (/expired|cancel|fail/i.test(p.displayProvisioningState ?? p.provisioningState ?? '')) continue;
+        if (r.location && r.location.toLowerCase().replace(/\s/g, '') !== loc) continue;
+        const exact = sku.toLowerCase() === size.toLowerCase();
+        if (!exact && seriesKey(sku) !== key) continue;
+        found.push({
+          name: r.name ?? sku,
+          sku,
+          ...(p.quantity !== undefined ? { quantity: p.quantity } : {}),
+          ...(p.expiryDate ? { expiry: p.expiryDate } : {}),
+          match: exact ? 'exact' : 'series',
+        });
+      }
+      return found;
+    };
+    const matches = find(vm.vmSize);
+    const proposedMatches = proposed ? find(proposed) : [];
     const target = proposed ?? 'the new size';
     const fam = lifecycleFamily(vm.vmSize);
-    const riNote = fam
-      ? ` Note: since 1 Jul 2026 new purchases and renewals of Reserved VM Instances are no longer available for older series such as ${fam}, so this reservation cannot be renewed.`
-      : '';
-    if (!matches.length) {
-      return {
-        status: 'none',
-        matches,
-        advice: `No reservation covering ${vm.vmSize} found.${riNote} If ${target} will run steadily, evaluate a 1- or 3-year reservation or an Azure savings plan for compute.`,
-      };
+    const noRenew = fam ? ' It cannot be renewed (no new RIs for older series since 1 Jul 2026).' : '';
+    const parts: string[] = [];
+    parts.push(matches.length ? `Current ${vm.vmSize}: reserved (${matches.length}).${noRenew}` : `Current ${vm.vmSize}: no reservation.`);
+    if (proposed) {
+      parts.push(
+        proposedMatches.length
+          ? `Proposed ${target}: reservation exists - will be used after migration.`
+          : `Proposed ${target}: no reservation.${matches.length ? ' The current reservation will not discount it; exchange/refund it or reuse it for other VMs of the same series, and buy a new reservation or savings plan for the new size.' : ' Consider a reservation or savings plan if it runs steadily.'}`,
+      );
     }
-    return {
-      status: 'found',
-      matches,
-      advice: `${vm.vmSize} is covered by a reservation. A reservation for the ${seriesKey(vm.vmSize)} series does not discount ${target} (different instance size flexibility group), so after migration the VM bills pay-as-you-go while the reservation sits unused. Options: (1) check in the Azure portal whether the reservation can be exchanged or refunded for ${target} [verify current exchange policy]; (2) let it cover other VMs of the same series; (3) buy a reservation or savings plan for ${target}. Time the migration against the reservation expiry.${riNote}`,
-    };
+    return { status: matches.length || proposedMatches.length ? 'found' : 'none', matches, proposedMatches, advice: parts.join(' ') };
   }
 }
