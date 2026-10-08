@@ -124,10 +124,15 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
       h('h4', {}, 'Zones ', badge(a.zones.status === 'ok' ? 'PASS' : a.zones.status === 'constrained' ? 'BLOCK' : 'WARN', a.zones.status)),
       h('p', {}, a.zones.message),
       h('h4', {}, 'Financial impact'),
-      h('p', {}, c.message, c.deltaPct != null ? ` List price ${pct(c.deltaPct)}; from 1 Feb 2027 ${pct(c.deltaPctWithUplift)}.` : ''),
+      c.deltaPctWithUplift != null
+        ? h('p', {}, h('strong', {}, `${money(c.currentMonthlyWithUplift)} -> ${money(c.proposedMonthlyWithUplift)} /month `),
+          h('span', { style: `font-weight:700;color:${c.deltaPctWithUplift > 0 ? '#c0392b' : '#1e8e3e'}` }, `(${pct(c.deltaPctWithUplift)} from 1 Feb 2027)`),
+          h('br'), h('small', {}, `List today: ${money(c.currentMonthly)} -> ${money(c.proposedMonthly)} (${pct(c.deltaPct)}). Uplift: ${upl(c.currentUpliftKind, c.currentUpliftPct)} -> ${upl(c.proposedUpliftKind, c.proposedUpliftPct)}.`))
+        : h('p', {}, c.message),
       h('h4', {}, 'Reservations ', badge(a.reservation.status === 'found' ? 'WARN' : 'PASS', a.reservation.status)),
       h('p', {}, a.reservation.advice),
-      a.reservation.matches.length ? h('ul', {}, a.reservation.matches.map((m) => h('li', {}, `${m.name}: ${m.sku} x${m.quantity ?? '?'} (${m.match})${m.expiry ? `, expires ${m.expiry}` : ''}`))) : '',
+      ...[['Current', a.reservation.matches], ['Proposed', a.reservation.proposedMatches ?? []]].filter(([, l]) => l.length).map(([label, l]) =>
+        h('ul', {}, l.map((m) => h('li', {}, `${label}: ${m.name} ${m.sku} x${m.quantity ?? '?'} (${m.match})${m.expiry ? `, expires ${m.expiry}` : ''}`)))),
       a.notes.length ? h('ul', {}, a.notes.map((n) => h('li', {}, n))) : '');
     const d = $('sku-info');
     if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');

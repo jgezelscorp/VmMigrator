@@ -59,7 +59,7 @@ export function createFakeApi({ tickMs = 10 } = {}) {
           quota: { status: 'ok', message: 'Quota OK.' },
           zones: { status: 'ok', vmZones: [], offeredZones: ['1'], message: 'No zone constraints.' },
           cost: { status: 'ok', currentUpliftPct: 25, proposedUpliftPct: 17, currentUpliftKind: 'lifecycle', proposedUpliftKind: 'regional', currentMonthly: 100, proposedMonthly: 90, deltaPct: -10, currentMonthlyWithUplift: 117, proposedMonthlyWithUplift: 105.3, deltaPctWithUplift: -10, message: 'Cheaper.' },
-          reservation: { status: 'none', matches: [], advice: 'No reservations found.' },
+          reservation: { status: 'none', matches: [], proposedMatches: [], advice: 'No reservations found.' },
           notes: [],
         };
       });
