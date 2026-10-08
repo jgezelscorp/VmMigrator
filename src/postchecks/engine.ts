@@ -157,11 +157,16 @@ export async function runPostChecks(deps: PostCheckDeps, job: MigrationJob, opts
     const ivStatus = new Map(
       (vm.extensions ?? []).map((e) => [e.name.toLowerCase(), e.statusCode ?? ''] as const),
     );
-    const failed = exts.filter((e) => /^failed$/i.test(e.properties?.provisioningState ?? '') || /\/failed$/i.test(ivStatus.get(e.name.toLowerCase()) ?? ''));
+    const isFailed = (e: (typeof exts)[number]) => /^failed$/i.test(e.properties?.provisioningState ?? '') || /\/failed$/i.test(ivStatus.get(e.name.toLowerCase()) ?? '');
+    const isOneShot = (e: (typeof exts)[number]) => /^enablevmaccess$|^vmaccess/i.test(e.name);
+    const oneShotFailed = exts.filter((e) => isFailed(e) && isOneShot(e));
+    const failed = exts.filter((e) => isFailed(e) && !isOneShot(e));
     const transitioning = exts.filter((e) => /^(creating|updating)$/i.test(e.properties?.provisioningState ?? ''));
     checks.push(
       failed.length
         ? item('extensions', 'FAIL', `Extension(s) in failed state: ${failed.map((e) => e.name).join(', ')}.`, 'Re-apply the extension or review its logs; roll back if it is critical.')
+        : oneShotFailed.length
+          ? item('extensions', 'WARN', `One-shot access extension(s) failed (${oneShotFailed.map((e) => e.name).join(', ')}); they only apply to password resets and can be uninstalled.`)
         : transitioning.length
           ? item('extensions', 'WARN', `Extension(s) still provisioning: ${transitioning.map((e) => e.name).join(', ')}.`)
           : item('extensions', 'PASS', exts.length ? `${exts.length} extension(s) provisioned successfully.` : 'No extensions installed.'),
