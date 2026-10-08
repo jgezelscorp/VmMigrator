@@ -1,4 +1,5 @@
 import { createApi } from './api.js';
+import { buildReport } from './report.js';
 
 const SKU_CHOICES = [
   'Standard_D2s_v6', 'Standard_D4s_v6', 'Standard_D2s_v5', 'Standard_D4s_v5', 'Standard_D2s_v7', 'Standard_D4s_v7',
@@ -106,6 +107,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     const lock = (id, off) => { $(id).disabled = off || busyBtns.has($(id)); };
     lock('btn-precheck', !any);
     lock('btn-dry', !any);
+    lock('btn-report', state.vms.length === 0);
     lock('btn-migrate', !any || !prechecked() || blocked());
     $('btn-migrate').title = !any ? 'Select VMs first' : !prechecked() ? 'Run pre-check first' : blocked() ? 'Blocked VMs selected' : '';
   }
@@ -247,6 +249,14 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     for (const v of filtered()) e.target.checked ? state.selected.add(v.id) : state.selected.delete(v.id);
     renderTable();
   };
+  function downloadReport() {
+    const html = buildReport({ vms: state.vms, prechecks: state.prechecks, jobs: [...state.jobs.values()], targets: state.targets, subscription: subId() });
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const a = h('a', { href: url, download: `vm-migrator-report-${new Date().toISOString().slice(0, 10)}.html` });
+    doc.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  $('btn-report').onclick = downloadReport;
   $('btn-precheck').onclick = runPrecheck;
   $('btn-dry').onclick = () => startMigration(true);
   $('btn-migrate').onclick = () => startMigration(false);
@@ -254,6 +264,6 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
   return client.listSubscriptions().then((subs) => {
     $('sub').replaceChildren(...subs.map((s) => h('option', { value: s.id ?? s.subscriptionId }, s.name ?? s.displayName ?? s.id)));
     renderTable();
-    return { state, load, runPrecheck, startMigration };
+    return { state, load, runPrecheck, startMigration, downloadReport };
   });
 }

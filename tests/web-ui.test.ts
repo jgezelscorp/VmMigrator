@@ -135,4 +135,21 @@ describe('web UI rebuild opt-in', () => {
     expect(started).toHaveLength(1);
     expect((started[0] as { options: unknown }).options).toEqual({ strategy: 'rebuild', confirmRebuild: true });
   });
+
+  it('downloads a standalone HTML report of the estate', async () => {
+    const ctx = await bootstrap();
+    $('btn-all').click();
+    await tick(60);
+    expect($('btn-report').disabled).toBe(false);
+    let blob: Blob | undefined;
+    (URL as unknown as { createObjectURL: (b: Blob) => string }).createObjectURL = (b) => { blob = b; return 'blob:x'; };
+    (URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = () => {};
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    $('btn-report').click();
+    expect(click).toHaveBeenCalled();
+    const text = await new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsText(blob!); });
+    expect(text).toContain('VM-Migrator estate report');
+    expect(text).toContain(ctx.state.vms[0].name);
+    click.mockRestore();
+  });
 });
