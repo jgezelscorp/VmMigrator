@@ -297,7 +297,9 @@ export class SkuAdvisor {
       });
     }
     const clean = (e: Evaluated): boolean => e.compatible && e.quota.status !== 'insufficient' && e.zones.status !== 'constrained';
-    const chosen = evaluated.find(clean) ?? evaluated.find((e) => e.compatible) ?? evaluated[0];
+    const pool = evaluated.some(clean) ? evaluated.filter(clean) : evaluated.some((e) => e.compatible) ? evaluated.filter((e) => e.compatible) : evaluated;
+    const chosen = await this.cheapestOfTopGeneration(vm, pool);
+    if (chosen) evaluated.splice(0, evaluated.length, chosen, ...evaluated.filter((e) => e !== chosen));
 
     const notes: string[] = [];
     if (!names.length) notes.push('No migration targets are defined for this size (it is not in a retiring series).');
@@ -331,6 +333,24 @@ export class SkuAdvisor {
       reservation: this.reservationAdvice(vm, chosen?.sku.name, reservations),
       notes,
     };
+  }
+
+  /** Among the newest-generation candidates, pick the lowest price from 1 Feb 2027 (uplifts included); ties and missing prices keep catalog order. */
+  private async cheapestOfTopGeneration(vm: VmInfo, pool: Evaluated[]): Promise<Evaluated | undefined> {
+    if (pool.length < 2) return pool[0];
+    const gen = (e: Evaluated): number => Number(/_v(\d+)$/i.exec(e.sku.name)?.[1] ?? 0);
+    const top = Math.max(...pool.map(gen));
+    const tier = pool.filter((e) => gen(e) === top);
+    if (tier.length < 2) return tier[0];
+    const priced = await Promise.all(
+      tier.map(async (e) => {
+        const hourly = await this.deps.prices.hourlyPrice(vm.location, e.sku.name, vm.osType).catch(() => undefined);
+        return { e, price: hourly === undefined ? Infinity : hourly * (1 + priceUplift(e.sku.name, vm.location).pct / 100) };
+      }),
+    );
+    let best = priced[0]!;
+    for (const p of priced) if (p.price < best.price - 1e-9) best = p;
+    return best.e;
   }
 
   private async cost(vm: VmInfo, from: string,   to: string): Promise<SkuAdvice['cost']> {
