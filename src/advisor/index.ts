@@ -2,6 +2,7 @@ import type { ArmClient } from '../azure/arm.js';
 import type { SkuInfo, SkuService, UsageInfo } from '../azure/skus.js';
 import { buildCandidateTargets, parseVcpuFromSize, type Catalog } from '../catalog/index.js';
 import type { VmInfo } from '../domain/types.js';
+import type { PerfProvider, SizePerf } from './perf.js';
 
 /** Announced regional VM price increases (percent), keyed by ARM region name. */
 export const REGIONAL_UPLIFT_PCT: Readonly<Record<string, number>> = {
@@ -111,6 +112,16 @@ export interface SkuSpec {
   diskControllers: string[];
   acceleratedNetworking: boolean;
   premiumIO: boolean;
+  acu?: number;
+  uncachedIops?: number;
+  uncachedMBps?: number;
+  cachedIops?: number;
+  maxNics?: number;
+  cpuArchitecture?: string;
+  focus?: string;
+  burstIops?: number;
+  burstMBps?: number;
+  networkMbps?: number;
 }
 
 export interface ReservationMatch {
@@ -166,9 +177,10 @@ export interface AdvisorDeps {
   skus: SkuService;
   catalog: Catalog;
   prices: PriceProvider;
+  perf?: PerfProvider;
 }
 
-const spec = (s: SkuInfo): SkuSpec => ({
+const spec = (s: SkuInfo, perf?: SizePerf): SkuSpec => ({
   name: s.name,
   family: s.family,
   vcpus: s.vcpus,
@@ -179,6 +191,13 @@ const spec = (s: SkuInfo): SkuSpec => ({
   diskControllers: s.diskControllers,
   acceleratedNetworking: s.acceleratedNetworking,
   premiumIO: s.premiumIO,
+  ...(s.acu !== undefined ? { acu: s.acu } : {}),
+  ...(s.uncachedIops !== undefined ? { uncachedIops: s.uncachedIops } : {}),
+  ...(s.uncachedBytesPerSec !== undefined ? { uncachedMBps: Math.round(s.uncachedBytesPerSec / 1e6) } : {}),
+  ...(s.cachedIops !== undefined ? { cachedIops: s.cachedIops } : {}),
+  ...(s.maxNics !== undefined ? { maxNics: s.maxNics } : {}),
+  ...(s.cpuArchitecture ? { cpuArchitecture: s.cpuArchitecture } : {}),
+  ...(perf ?? {}),
 });
 
 /** "Standard_D2s_v3" -> "ds_v3" */
@@ -320,13 +339,18 @@ export class SkuAdvisor {
           message: 'No proposed SKU, so no cost comparison.',
         } as SkuAdvice['cost']);
 
+    const [curPerf, newPerf] = await Promise.all([
+      source ? this.deps.perf?.get(source.name).catch(() => undefined) : undefined,
+      chosen ? this.deps.perf?.get(chosen.sku.name).catch(() => undefined) : undefined,
+    ]);
+
     return {
       vmId: vm.id,
       vmName: vm.name,
       location: vm.location,
       osType: vm.osType,
-      ...(source ? { current: spec(source) } : {}),
-      ...(chosen ? { proposed: spec(chosen.sku) } : {}),
+      ...(source ? { current: spec(source, curPerf) } : {}),
+      ...(chosen ? { proposed: spec(chosen.sku, newPerf) } : {}),
       hasIssues: !!chosen && !clean(chosen),
       alternatives: evaluated.filter((e) => e !== chosen).map((e) => e.sku.name),
       quota: chosen?.quota ?? { status: 'unknown', message: 'No proposed SKU.' },

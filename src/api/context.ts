@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { SkuAdvisor, RetailPriceProvider, type PriceProvider, type SkuAdvice } from '../advisor/index.js';
+import { DocsPerfProvider, type PerfProvider } from '../advisor/perf.js';
 import { AzureCliCredentialProvider } from '../azure/credential.js';
 import { HttpArmClient, type ArmClient } from '../azure/arm.js';
 import { SkuService } from '../azure/skus.js';
@@ -29,6 +30,7 @@ export interface ContextOptions {
   store?: JobStore;
   concurrency?: number;
   prices?: PriceProvider;
+  perf?: PerfProvider;
   /** Test hook: skip real waiting */
   fast?: boolean;
 }
@@ -55,7 +57,7 @@ export function createContext(opts: ContextOptions = {}): AppContext {
     }),
     ...(opts.fast ? { sleep: async () => undefined, pollIntervalMs: 1, provisionTimeoutMs: 50 } : {}),
   });
-  const advisor = new SkuAdvisor({ arm, skus, catalog, prices: opts.prices ?? new RetailPriceProvider() });
+  const advisor = new SkuAdvisor({ arm, skus, catalog, prices: opts.prices ?? new RetailPriceProvider(), perf: opts.perf ?? (opts.prices ? undefined : new DocsPerfProvider()) });
   const service = new MigrationService(engine, { concurrency: opts.concurrency ?? 2 });
   return {
     arm,
