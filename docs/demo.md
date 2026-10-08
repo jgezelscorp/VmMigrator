@@ -42,7 +42,8 @@ Cost/safety: StandardSSD_LRS disks, **no public IPs**, NSG denies Internet inbou
 ```powershell
 az login
 .\demo\deploy.ps1 -WhatIf                         # what-if only
-.\demo\deploy.ps1 -Location swedencentral         # real deploy; password generated unless $env:VMMIG_ADMIN_PASSWORD is set
+.\demo\deploy.ps1 -Location swedencentral         # real deploy; password: -AdminPassword > $env:VMMIG_ADMIN_PASSWORD > generated
+.\demo\deploy.ps1 -AdminUser myadmin -AdminPassword 'S0me-Str0ng-Pw!'   # logon info is printed at the end
 .\demo\deploy.ps1 -Series Dsv3,DS2_v2 -Location westeurope   # subset
 az vm list -g rg-vmmigrator-demo -d -o table
 ```

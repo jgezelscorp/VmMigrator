@@ -5,6 +5,8 @@ param(
     [string]$Location = 'swedencentral',
     [string[]]$Series,
     [string]$OperatorIp = '',
+    [string]$AdminUser = 'demoadmin',
+    [string]$AdminPassword,
     [switch]$NoAutoShutdown,
     [switch]$NoBastion,
     # Also remove local migration job state so the UI starts clean.
@@ -36,6 +38,8 @@ if ($ClearJobs) {
 $deployParams = @{ Subscription = $Subscription; ResourceGroup = $ResourceGroup; Location = $Location; OperatorIp = $OperatorIp }
 if ($Series) { $deployParams.Series = $Series }
 if ($NoAutoShutdown) { $deployParams.NoAutoShutdown = $true }
+$deployParams.AdminUser = $AdminUser
+if ($AdminPassword) { $deployParams.AdminPassword = $AdminPassword }
 if ($NoBastion) { $deployParams.NoBastion = $true }
 & "$here\deploy.ps1" @deployParams
 Write-Host 'Demo fleet redeployed to its original v1/v2/v3 state.'
