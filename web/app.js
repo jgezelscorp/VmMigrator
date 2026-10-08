@@ -292,6 +292,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
         }
         for (const j of jobs) { state.jobs.set(j.id, j); poll(j.id); }
         renderProgress();
+        $('progress').scrollIntoView?.({ behavior: 'smooth', block: 'start' });
       } catch (e) { showError(e); }
     });
   }
