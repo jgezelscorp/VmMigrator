@@ -9,10 +9,11 @@
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="topbar">
-      <h1>VmMigrator</h1>
+      <h1><span class="logo" aria-hidden="true">&#9889;</span> VmMigrator <small>VM lifecycle factory</small></h1>
       <span id="mock-badge" class="badge warn" hidden>MOCK MODE</span>
       <span class="auth" title="Authentication placeholder (Entra sign-in is tracked in #11)">&#9679; Signed in via Azure CLI</span>
     </header>
+    <div id="global-bar" class="bar indeterminate global" role="progressbar" aria-label="Working" hidden><span></span></div>
 
     <main id="main">
       <section aria-labelledby="h-select">
@@ -29,6 +30,7 @@
           <input id="filter" type="search" placeholder="name, size, region, series…" />
           <span id="count" aria-live="polite"></span>
         </div>
+        <div id="load-bar" class="bar indeterminate" role="progressbar" aria-label="Loading VMs" hidden><span></span></div>
         <div id="error" role="alert" class="error" hidden></div>
         <div class="table-wrap">
           <table id="vm-table">
@@ -47,6 +49,7 @@
       <section aria-labelledby="h-pre">
         <h2 id="h-pre">2. Pre-check</h2>
         <button id="btn-precheck" type="button" disabled>Run pre-check for selected</button>
+        <div id="pre-bar" class="bar indeterminate" role="progressbar" aria-label="Running pre-checks" hidden><span></span></div>
         <div id="precheck" aria-live="polite"></div>
       </section>
 
@@ -56,6 +59,7 @@
           <button id="btn-dry" type="button" class="secondary" disabled>Dry run</button>
           <button id="btn-migrate" type="button" class="danger" disabled>Migrate…</button>
         </div>
+        <div id="mig-bar" class="bar indeterminate" role="progressbar" aria-label="Starting migration" hidden><span></span></div>
         <div id="progress" aria-live="polite"></div>
       </section>
 

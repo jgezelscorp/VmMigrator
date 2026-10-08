@@ -25,6 +25,27 @@ const $ = (id: string) => document.getElementById(id) as HTMLInputElement & HTML
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 
 describe('web UI (mock mode)', () => {
+  it('shows busy indicators while an action runs and a progress bar per migration job', async () => {
+    await bootstrap();
+    $('btn-detect').click();
+    expect($('btn-detect').getAttribute('aria-busy')).toBe('true');
+    expect($('global-bar').hidden).toBe(false);
+    expect($('load-bar').hidden).toBe(false);
+    await tick();
+    expect($('btn-detect').hasAttribute('aria-busy')).toBe(false);
+    expect($('global-bar').hidden).toBe(true);
+    expect($('btn-detect').disabled).toBe(false);
+
+    const cb = document.querySelector('#vm-table tbody input[type=checkbox]') as HTMLInputElement;
+    cb.checked = true;
+    cb.dispatchEvent(new Event('change'));
+    $('btn-dry').click();
+    await vi.waitFor(() => expect(document.querySelector('#progress [role=progressbar]')).not.toBeNull(), { timeout: 3000 });
+    expect(document.querySelector('#progress [role=progressbar]')!.getAttribute('aria-valuenow')).toMatch(/^\d+$/);
+    await vi.waitFor(() => expect(document.querySelector('#progress .badge.Done')).not.toBeNull(), { timeout: 3000 });
+    expect(document.querySelector('#progress [role=progressbar]')!.getAttribute('aria-valuenow')).toBe('100');
+  });
+
   it('detects retiring VMs, prechecks, requires confirmation, and migrates', async () => {
     await bootstrap();
     $('btn-detect').click();

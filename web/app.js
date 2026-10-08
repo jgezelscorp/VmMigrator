@@ -32,16 +32,35 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
   const showError = (e) => { $('error').hidden = !e; $('error').textContent = e ? (e.message ?? String(e)) : ''; };
   const subId = () => $('sub-text').value.trim() || $('sub').value;
 
+  // Shows a spinner on the button(s), an indeterminate bar and the global bar while fn runs.
+  const busyBtns = new Set();
+  let busyCount = 0;
+  async function busy(btns, bar, fn) {
+    busyCount++;
+    $('global-bar').hidden = false;
+    if (bar) bar.hidden = false;
+    for (const b of btns) { busyBtns.add(b); b.classList.add('busy'); b.setAttribute('aria-busy', 'true'); b.disabled = true; }
+    try { return await fn(); } finally {
+      busyCount--;
+      if (!busyCount) $('global-bar').hidden = true;
+      if (bar) bar.hidden = true;
+      for (const b of btns) { busyBtns.delete(b); b.classList.remove('busy'); b.removeAttribute('aria-busy'); b.disabled = false; }
+      updateButtons();
+    }
+  }
+
   async function load(retiringOnly) {
     showError(null);
-    try {
-      state.vms = await client.listVms({ subscriptionId: subId(), retiringOnly });
-      state.selected.clear();
-      state.prechecks = {};
-      state.rebuild.clear();
-      $('precheck').replaceChildren();
-      renderTable();
-    } catch (e) { showError(e); }
+    await busy([$(retiringOnly ? 'btn-detect' : 'btn-all')], $('load-bar'), async () => {
+      try {
+        state.vms = await client.listVms({ subscriptionId: subId(), retiringOnly });
+        state.selected.clear();
+        state.prechecks = {};
+        state.rebuild.clear();
+        $('precheck').replaceChildren();
+        renderTable();
+      } catch (e) { showError(e); }
+    });
   }
 
   function filtered() {
@@ -85,9 +104,10 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
 
   function updateButtons() {
     const any = state.selected.size > 0;
-    $('btn-precheck').disabled = !any;
-    $('btn-dry').disabled = !any;
-    $('btn-migrate').disabled = !any || !prechecked() || blocked();
+    const lock = (id, off) => { $(id).disabled = off || busyBtns.has($(id)); };
+    lock('btn-precheck', !any);
+    lock('btn-dry', !any);
+    lock('btn-migrate', !any || !prechecked() || blocked());
     $('btn-migrate').title = !any ? 'Select VMs first' : !prechecked() ? 'Run pre-check first' : blocked() ? 'Blocked VMs selected' : '';
   }
 
@@ -109,16 +129,18 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
 
   async function runPrecheck() {
     showError(null);
-    try {
-      const ids = [...state.selected];
-      const groups = [[ids.filter((id) => !state.rebuild.has(id)), undefined], [ids.filter((id) => state.rebuild.has(id)), 'rebuild']];
-      for (const [group, strategy] of groups) {
-        if (!group.length) continue;
-        const o = Object.fromEntries(group.map((id) => [id, targetFor(id)]));
-        for (const r of await client.precheck(group, o, strategy)) { state.prechecks[r.vmId] = r; state.targets[r.vmId] = r.targetSku; }
-      }
-      renderPrecheck(); renderTable();
-    } catch (e) { showError(e); }
+    await busy([$('btn-precheck')], $('pre-bar'), async () => {
+      try {
+        const ids = [...state.selected];
+        const groups = [[ids.filter((id) => !state.rebuild.has(id)), undefined], [ids.filter((id) => state.rebuild.has(id)), 'rebuild']];
+        for (const [group, strategy] of groups) {
+          if (!group.length) continue;
+          const o = Object.fromEntries(group.map((id) => [id, targetFor(id)]));
+          for (const r of await client.precheck(group, o, strategy)) { state.prechecks[r.vmId] = r; state.targets[r.vmId] = r.targetSku; }
+        }
+        renderPrecheck(); renderTable();
+      } catch (e) { showError(e); }
+    });
   }
 
   async function toggleRebuild(id, on) {
@@ -149,16 +171,18 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
   async function startMigration(dryRun) {
     if (!dryRun && !(await confirmMigration())) return;
     showError(null);
-    try {
-      const ids = [...state.selected];
-      const jobs = [];
-      for (const [group, options] of [[ids.filter((id) => !state.rebuild.has(id)), undefined], [ids.filter((id) => state.rebuild.has(id)), { strategy: 'rebuild', confirmRebuild: true }]]) {
-        if (!group.length) continue;
-        jobs.push(...await client.startMigration({ vmIds: group, dryRun, targetOverrides: Object.fromEntries(group.map((id) => [id, targetFor(id)])), options }));
-      }
-      for (const j of jobs) { state.jobs.set(j.id, j); poll(j.id); }
-      renderProgress();
-    } catch (e) { showError(e); }
+    await busy([$(dryRun ? 'btn-dry' : 'btn-migrate')], $('mig-bar'), async () => {
+      try {
+        const ids = [...state.selected];
+        const jobs = [];
+        for (const [group, options] of [[ids.filter((id) => !state.rebuild.has(id)), undefined], [ids.filter((id) => state.rebuild.has(id)), { strategy: 'rebuild', confirmRebuild: true }]]) {
+          if (!group.length) continue;
+          jobs.push(...await client.startMigration({ vmIds: group, dryRun, targetOverrides: Object.fromEntries(group.map((id) => [id, targetFor(id)])), options }));
+        }
+        for (const j of jobs) { state.jobs.set(j.id, j); poll(j.id); }
+        renderProgress();
+      } catch (e) { showError(e); }
+    });
   }
 
   const TERMINAL = new Set(['Done', 'Failed', 'Restored']);
@@ -187,11 +211,18 @@ export function init(doc, mock, { pollMs = POLL_MS, api } = {}) {
   function renderProgress() {
     $('progress').replaceChildren(...[...state.jobs.values()].map((j) => {
       const vm = state.vms.find((v) => v.id === j.plan.vmId);
+      const steps = j.plan.strategy === 'rebuild' ? REBUILD_STEPS : STEPS;
+      const finished = TERMINAL.has(j.state);
+      const pct = j.state === 'Done' ? 100 : Math.round((steps.filter((s) => j.completedSteps.includes(s)).length / steps.length) * 100);
+      const current = finished ? null : steps.find((s) => !j.completedSteps.includes(s));
       const kids = [
         h('h3', {}, vm?.name ?? j.plan.vmId, ' ', j.plan.sourceSku, ' → ', j.plan.targetSku, ' ', badge(j.state),
           j.plan.dryRun ? ' (dry run)' : ''),
-        h('ol', { class: 'steps', 'aria-label': 'Migration steps' }, (j.plan.strategy === 'rebuild' ? REBUILD_STEPS : STEPS).map((s) =>
-          h('li', { class: j.completedSteps.includes(s) ? 'done' : '' }, (j.completedSteps.includes(s) ? '✓ ' : '') + s))),
+        h('div', { class: `bar ${finished ? (j.state === 'Done' ? 'ok' : 'bad') : 'active'}`, role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct), 'aria-label': `Migration progress for ${vm?.name ?? j.plan.vmId}` },
+          h('span', { style: `width:${pct}%` })),
+        h('p', { class: 'pct' }, finished ? `${j.state} · ${pct}%` : `${pct}% · ${current ?? 'finishing'}…`),
+        h('ol', { class: 'steps', 'aria-label': 'Migration steps' }, steps.map((s) =>
+          h('li', { class: j.completedSteps.includes(s) ? 'done' : s === current ? 'current' : '' }, (j.completedSteps.includes(s) ? '✓ ' : '') + s))),
       ];
       if (j.error) kids.push(h('p', { class: 'error', role: 'alert' }, j.error));
       if (j.state === 'Failed' || j.state === 'Restored' || j.state === 'RollingBack') {
