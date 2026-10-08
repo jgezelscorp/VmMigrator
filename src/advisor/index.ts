@@ -14,6 +14,39 @@ export const REGIONAL_UPLIFT_PCT: Readonly<Record<string, number>> = {
   southeastasia: 8,
 };
 
+/** VM lifecycle increase (percent), effective 1 Feb 2027, for the retiring older families (global). */
+export const LIFECYCLE_UPLIFT_PCT = 25;
+
+export type UpliftKind = 'lifecycle' | 'regional' | 'none';
+
+/** Older VM families covered by the lifecycle increase, or undefined for current families. */
+export function lifecycleFamily(size: string): string | undefined {
+  const m = /^Standard_([A-Za-z]+?)\d+(?:-\d+)?([a-z]*)(?:_([A-Za-z0-9]+))?/i.exec(size);
+  if (!m) return undefined;
+  const letters = m[1]!.toUpperCase();
+  const sfx = (m[2] ?? '').toLowerCase();
+  const ver = (m[3] ?? '').toLowerCase();
+  if (!ver) {
+    const plain: Record<string, string> = { B: 'Bv1', D: 'D', DS: 'Ds', F: 'F', G: 'G', GS: 'Gs', L: 'L', NP: 'NP', HC: 'HC' };
+    if (letters === 'F' && sfx === 's') return 'Fs';
+    return plain[letters];
+  }
+  if (ver !== 'v2') return undefined;
+  if (letters === 'A') return sfx === 'm' ? 'Amv2' : sfx === '' ? 'Av2' : undefined;
+  if (letters === 'D' && sfx === '') return 'Dv2';
+  if (letters === 'DS' && sfx === '') return 'Dsv2';
+  if (letters === 'F' && sfx === 's') return 'Fsv2';
+  if (letters === 'L' && sfx === 's') return 'Lsv2';
+  return undefined;
+}
+
+/** Lifecycle +25% wins and is never stacked with the regional uplift. */
+export function priceUplift(size: string, region: string): { pct: number; kind: UpliftKind } {
+  if (lifecycleFamily(size)) return { pct: LIFECYCLE_UPLIFT_PCT, kind: 'lifecycle' };
+  const r = REGIONAL_UPLIFT_PCT[region.toLowerCase()];
+  return r ? { pct: r, kind: 'regional' } : { pct: 0, kind: 'none' };
+}
+
 const HOURS_PER_MONTH = 730;
 
 export interface PriceProvider {
@@ -97,7 +130,10 @@ export interface SkuAdvice {
     currentMonthly?: number;
     proposedMonthly?: number;
     deltaPct?: number;
-    upliftPct: number;
+    currentUpliftPct: number;
+    proposedUpliftPct: number;
+    currentUpliftKind: UpliftKind;
+    proposedUpliftKind: UpliftKind;
     currentMonthlyWithUplift?: number;
     proposedMonthlyWithUplift?: number;
     deltaPctWithUplift?: number;
@@ -260,10 +296,16 @@ export class SkuAdvisor {
     if (chosen?.compatNote) notes.push(chosen.compatNote);
     if (chosen && !clean(chosen)) notes.push('No candidate passed every check; the best-effort proposal has open issues.');
 
-    const upliftPct = REGIONAL_UPLIFT_PCT[vm.location.toLowerCase()] ?? 0;
     const cost = chosen
-      ? await this.cost(vm, vm.vmSize, chosen.sku.name, upliftPct)
-      : ({ status: 'unavailable', upliftPct, message: 'No proposed SKU, so no cost comparison.' } as SkuAdvice['cost']);
+      ? await this.cost(vm, vm.vmSize, chosen.sku.name)
+      : ({
+          status: 'unavailable',
+          currentUpliftPct: 0,
+          proposedUpliftPct: 0,
+          currentUpliftKind: 'none',
+          proposedUpliftKind: 'none',
+          message: 'No proposed SKU, so no cost comparison.',
+        } as SkuAdvice['cost']);
 
     return {
       vmId: vm.id,
@@ -282,24 +324,32 @@ export class SkuAdvisor {
     };
   }
 
-  private async cost(vm: VmInfo, from: string, to: string, upliftPct: number): Promise<SkuAdvice['cost']> {
+  private async cost(vm: VmInfo, from: string,   to: string): Promise<SkuAdvice['cost']> {
     const { prices } = this.deps;
     const [cur, next] = await Promise.all([prices.hourlyPrice(vm.location, from, vm.osType), prices.hourlyPrice(vm.location, to, vm.osType)]);
-    const upliftNote = upliftPct
-      ? `Announced regional increase for ${vm.location}: +${upliftPct}%, applied to both sizes.`
-      : `No announced regional increase for ${vm.location}.`;
-    if (cur === undefined || next === undefined) {
-      return {
-        status: 'unavailable',
-        upliftPct,
+      const cu = priceUplift(from, vm.location);
+      const pu = priceUplift(to, vm.location);
+      const describe = (size: string, u: { pct: number; kind: UpliftKind }): string =>
+        u.kind === 'lifecycle'
+          ? `${size}: VM lifecycle +${u.pct}% (global, replaces any regional increase)`
+          : u.kind === 'regional'
+            ? `${size}: regional +${u.pct}% (${vm.location})`
+            : `${size}: no announced increase`;
+      const upliftNote = `Effective 1 Feb 2027 - ${describe(from, cu)}; ${describe(to, pu)}.`;
+      const common = { currentUpliftPct: cu.pct, proposedUpliftPct: pu.pct, currentUpliftKind: cu.kind, proposedUpliftKind: pu.kind };
+      if (cur === undefined || next === undefined) {
+        return {
+          status: 'unavailable',
+          ...common,
         ...(cur !== undefined ? { currentHourly: cur, currentMonthly: round(cur * HOURS_PER_MONTH) } : {}),
         ...(next !== undefined ? { proposedHourly: next, proposedMonthly: round(next * HOURS_PER_MONTH) } : {}),
         message: `List price unavailable for ${cur === undefined ? from : to} (${vm.osType}, ${vm.location}); cost impact could not be computed. ${upliftNote}`,
       };
     }
-    const f = 1 + upliftPct / 100;
     const curM = cur * HOURS_PER_MONTH;
     const nextM = next * HOURS_PER_MONTH;
+    const curU = curM * (1 + cu.pct / 100);
+    const nextU = nextM * (1 + pu.pct / 100);
     return {
       status: 'ok',
       currentHourly: cur,
@@ -307,10 +357,10 @@ export class SkuAdvisor {
       currentMonthly: round(curM),
       proposedMonthly: round(nextM),
       deltaPct: round(((next - cur) / cur) * 100, 1),
-      upliftPct,
-      currentMonthlyWithUplift: round(curM * f),
-      proposedMonthlyWithUplift: round(nextM * f),
-      deltaPctWithUplift: round(((nextM * f - curM * f) / (curM * f)) * 100, 1),
+      ...common,
+      currentMonthlyWithUplift: round(curU),
+      proposedMonthlyWithUplift: round(nextU),
+      deltaPctWithUplift: round(((nextU - curU) / curU) * 100, 1),
       message: `Pay-as-you-go list prices (USD, ${vm.osType}, 730 h/month). ${upliftNote}`,
     };
   }
@@ -343,17 +393,21 @@ export class SkuAdvisor {
       });
     }
     const target = proposed ?? 'the new size';
+    const fam = lifecycleFamily(vm.vmSize);
+    const riNote = fam
+      ? ` Note: since 1 Jul 2026 new purchases and renewals of Reserved VM Instances are no longer available for older series such as ${fam}, so this reservation cannot be renewed.`
+      : '';
     if (!matches.length) {
       return {
         status: 'none',
         matches,
-        advice: `No reservation covering ${vm.vmSize} found. If ${target} will run steadily, evaluate a 1- or 3-year reservation or an Azure savings plan for compute.`,
+        advice: `No reservation covering ${vm.vmSize} found.${riNote} If ${target} will run steadily, evaluate a 1- or 3-year reservation or an Azure savings plan for compute.`,
       };
     }
     return {
       status: 'found',
       matches,
-      advice: `${vm.vmSize} is covered by a reservation. A reservation for the ${seriesKey(vm.vmSize)} series does not discount ${target} (different instance size flexibility group), so after migration the VM bills pay-as-you-go while the reservation sits unused. Options: (1) check in the Azure portal whether the reservation can be exchanged or refunded for ${target} [verify current exchange policy]; (2) let it cover other VMs of the same series; (3) buy a reservation or savings plan for ${target}. Time the migration against the reservation expiry.`,
+      advice: `${vm.vmSize} is covered by a reservation. A reservation for the ${seriesKey(vm.vmSize)} series does not discount ${target} (different instance size flexibility group), so after migration the VM bills pay-as-you-go while the reservation sits unused. Options: (1) check in the Azure portal whether the reservation can be exchanged or refunded for ${target} [verify current exchange policy]; (2) let it cover other VMs of the same series; (3) buy a reservation or savings plan for ${target}. Time the migration against the reservation expiry.${riNote}`,
     };
   }
 }

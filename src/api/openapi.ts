@@ -14,7 +14,7 @@ export const OPENAPI = {
       },
     },
     '/api/vms/precheck': { post: { summary: 'Body { vmIds[], targetOverrides?, strategy?: inPlace or rebuild } -> { results: PreCheckResult[] }' } },
-    '/api/vms/sku-advice': { post: { summary: 'Body { vmIds[] } -> { advice: SkuAdvice[] } best target SKU per VM with quota, zone, cost (incl. regional uplift) and reservation analysis' } },
+    '/api/vms/sku-advice': { post: { summary: 'Body { vmIds[] } -> { advice: SkuAdvice[] } best target SKU per VM with quota, zone, cost (incl. 1 Feb 2027 lifecycle/regional price changes) and reservation analysis' } },
     '/api/migrations': {
       get: { summary: 'List jobs: { jobs }' },
       post: { summary: 'Body { vmIds[], dryRun?, targetOverrides?, options? { cleanupSnapshots, skipSnapshots, guestProbe, autoRollbackOnPostCheckFail, strategy: inPlace or rebuild, confirmRebuild (required for a real rebuild), movePagefile } } -> 202 { jobs } (200 for dryRun); 409 when a pre-check BLOCKs' },
