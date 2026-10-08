@@ -18,9 +18,10 @@
       <section aria-labelledby="h-select">
         <h2 id="h-select">1. Select VMs</h2>
         <div class="row">
-          <label for="sub">Subscription</label>
-          <select id="sub"></select>
-          <input id="sub-text" type="text" placeholder="or paste subscription id" aria-label="Subscription id" />
+          <label for="sub">Subscriptions</label>
+          <select id="sub" multiple size="5" title="Ctrl/Shift-click to select several; none selected = all"></select>
+          <button id="btn-sub-all" type="button" class="secondary">Select all</button>
+          <input id="sub-text" type="text" placeholder="or paste subscription ids (comma separated)" aria-label="Subscription ids" />
           <button id="btn-detect" type="button">Auto-detect retiring VMs</button>
           <button id="btn-all" type="button" class="secondary">Show all VMs</button>
 <button id="btn-auto-sku" type="button" disabled>Auto-SKU Selection</button>

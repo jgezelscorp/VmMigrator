@@ -58,7 +58,7 @@ th,td{border:1px solid #e0e5f2;padding:.35rem .5rem;text-align:left;vertical-ali
 @media print{body{margin:.5rem;background:#fff}}
 </style></head><body>
 <h1>VM-Migrator estate report</h1>
-<p class="meta">Generated ${esc(new Date(generatedAt).toISOString())}${subscription ? ` · Subscription ${esc(subscription)}` : ''}</p>
+<p class="meta">Generated ${esc(new Date(generatedAt).toISOString())} · ${subscription ? `Subscription${subscription.includes(',') ? 's' : ''} ${esc(subscription.split(',').join(', '))}` : 'All subscriptions'}</p>
 <div class="kpis">
 ${kpi(vms.length, 'VMs discovered')}${kpi(retiring.length, 'On retiring series')}${kpi(count(vms, (v) => v.osType === 'Windows'), 'Windows')}${kpi(count(vms, (v) => v.osType === 'Linux'), 'Linux')}
 ${kpi(count(checked, (v) => prechecks[v.id].overall === 'PASS'), 'Pre-check PASS')}${kpi(count(checked, (v) => prechecks[v.id].overall === 'WARN'), 'Pre-check WARN')}${kpi(count(checked, (v) => prechecks[v.id].overall === 'BLOCK'), 'Pre-check BLOCK')}${kpi(count(jobList, (j) => j.state === 'Done' && !j.plan?.dryRun), 'Migrated')}
