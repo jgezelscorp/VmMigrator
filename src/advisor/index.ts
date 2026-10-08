@@ -3,6 +3,7 @@ import type { SkuInfo, SkuService, UsageInfo } from '../azure/skus.js';
 import { buildCandidateTargets, parseVcpuFromSize, type Catalog } from '../catalog/index.js';
 import type { VmInfo } from '../domain/types.js';
 import type { PerfProvider, SizePerf } from './perf.js';
+import { processorFor } from './processor.js';
 
 /** Announced regional VM price increases (percent), keyed by ARM region name. */
 export const REGIONAL_UPLIFT_PCT: Readonly<Record<string, number>> = {
@@ -112,7 +113,8 @@ export interface SkuSpec {
   diskControllers: string[];
   acceleratedNetworking: boolean;
   premiumIO: boolean;
-  acu?: number;
+  processor?: string;
+  perfIndex?: number;
   uncachedIops?: number;
   uncachedMBps?: number;
   cachedIops?: number;
@@ -191,7 +193,7 @@ const spec = (s: SkuInfo, perf?: SizePerf): SkuSpec => ({
   diskControllers: s.diskControllers,
   acceleratedNetworking: s.acceleratedNetworking,
   premiumIO: s.premiumIO,
-  ...(s.acu !== undefined ? { acu: s.acu } : {}),
+  ...(processorFor(s.name) ?? {}),
   ...(s.uncachedIops !== undefined ? { uncachedIops: s.uncachedIops } : {}),
   ...(s.uncachedBytesPerSec !== undefined ? { uncachedMBps: Math.round(s.uncachedBytesPerSec / 1e6) } : {}),
   ...(s.cachedIops !== undefined ? { cachedIops: s.cachedIops } : {}),
