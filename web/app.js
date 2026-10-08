@@ -94,6 +94,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     const a = state.advice[id];
     if (!a) return;
     const c = a.cost;
+    const upl = (kind, p) => (kind === 'lifecycle' ? `+${p}% lifecycle` : kind === 'regional' ? `+${p}% regional` : 'none');
     const sc = a.current, sp = a.proposed;
     const row = (label, x, y) => h('tr', {}, h('th', {}, label), h('td', {}, x ?? '—'), h('td', {}, y ?? '—'));
     const cmp = h('table', { class: 'cmp' },
@@ -107,7 +108,8 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
         row('Disk controller', sc?.diskControllers.join(', '), sp?.diskControllers.join(', ')),
         row('Accelerated networking', sc ? String(sc.acceleratedNetworking) : '', sp ? String(sp.acceleratedNetworking) : ''),
         row('Monthly (list)', money(c.currentMonthly), money(c.proposedMonthly)),
-        row(`Monthly (+${c.upliftPct}% regional uplift)`, money(c.currentMonthlyWithUplift), money(c.proposedMonthlyWithUplift))));
+        row('Increase from 1 Feb 2027', upl(c.currentUpliftKind, c.currentUpliftPct), upl(c.proposedUpliftKind, c.proposedUpliftPct)),
+        row('Monthly (from 1 Feb 2027)', money(c.currentMonthlyWithUplift), money(c.proposedMonthlyWithUplift))));
     $('sku-info-title').textContent = `SKU comparison: ${a.vmName}`;
     $('sku-info-body').replaceChildren(
       cmp,
@@ -116,7 +118,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
       h('h4', {}, 'Zones ', badge(a.zones.status === 'ok' ? 'PASS' : a.zones.status === 'constrained' ? 'BLOCK' : 'WARN', a.zones.status)),
       h('p', {}, a.zones.message),
       h('h4', {}, 'Financial impact'),
-      h('p', {}, c.message, c.deltaPct != null ? ` List price ${pct(c.deltaPct)}; with regional uplift ${pct(c.deltaPctWithUplift)}.` : ''),
+      h('p', {}, c.message, c.deltaPct != null ? ` List price ${pct(c.deltaPct)}; from 1 Feb 2027 ${pct(c.deltaPctWithUplift)}.` : ''),
       h('h4', {}, 'Reservations ', badge(a.reservation.status === 'found' ? 'WARN' : 'PASS', a.reservation.status)),
       h('p', {}, a.reservation.advice),
       a.reservation.matches.length ? h('ul', {}, a.reservation.matches.map((m) => h('li', {}, `${m.name}: ${m.sku} x${m.quantity ?? '?'} (${m.match})${m.expiry ? `, expires ${m.expiry}` : ''}`))) : '',

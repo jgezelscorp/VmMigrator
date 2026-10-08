@@ -111,8 +111,11 @@ Open <http://127.0.0.1:3000/>. If you see `401 NotLoggedIn`, run `az login` agai
 3. Optionally override the target SKU (default is the matching v7 size, with v6 as fallback).
    Click **Auto-SKU selection** to pick the best SKU for every VM and put it first in each dropdown. The **ℹ** button
    beside a dropdown opens a side-by-side comparison of the current and proposed SKU, with quota check, zone
-   constraints, monthly cost impact (including the announced regional price increases, e.g. North Europe +17%,
-   West Europe +9%) and reservation advice (existing reservations are looked up; if found, exchange or re-scope them).
+   constraints, monthly cost impact and reservation advice. Pricing follows the changes effective 1 Feb 2027:
+   older VM families (Bv1, D, Ds, F, Fs, G, Gs, L, NP, HC, Av2, Amv2, Dv2, Dsv2, Fsv2, Lsv2) get +25% globally;
+   other sizes get the regional increase (North Europe +17%, France Central/South +11%, West Europe/Norway +9%,
+   Southeast Asia +8%). The two are never stacked. Reservation advice notes that since 1 Jul 2026 reservations for
+   the older series can no longer be purchased or renewed, and recommends a reservation or savings plan on the new size.
 4. Start with **Dry run**, then run the real **Migrate**. For each VM the engine:
    re-validates, snapshots the disks, deallocates, resizes (and switches the disk controller to NVMe when needed),
    starts the VM, then runs post-checks (provisioning, power, size, agent heartbeat, extensions, disks, networking).

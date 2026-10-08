@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REGIONAL_UPLIFT_PCT, RetailPriceProvider } from '../src/advisor/index.js';
+import { REGIONAL_UPLIFT_PCT, RetailPriceProvider, lifecycleFamily, priceUplift } from '../src/advisor/index.js';
 
 const items = [
   { retailPrice: 0.2, productName: 'Virtual Machines Dsv6 Series', skuName: 'D2s v6', meterName: 'D2s v6' },
@@ -9,6 +9,19 @@ const items = [
 const fakeFetch = (async () => ({ ok: true, json: async () => ({ Items: items }) })) as unknown as typeof fetch;
 
 describe('advisor', () => {
+  it('detects lifecycle families', () => {
+    for (const s of ['Standard_B2s', 'Standard_D2', 'Standard_DS2', 'Standard_F4s', 'Standard_G2', 'Standard_GS2', 'Standard_L4s', 'Standard_NP10s', 'Standard_HC44rs', 'Standard_A2_v2', 'Standard_A2m_v2', 'Standard_D2_v2', 'Standard_DS2_v2', 'Standard_F2s_v2', 'Standard_L8s_v2'])
+      expect(lifecycleFamily(s), s).toBeTruthy();
+    for (const s of ['Standard_D2s_v3', 'Standard_D2s_v5', 'Standard_B2s_v2', 'Standard_F2s_v3', 'Standard_L8s_v3', 'Standard_E4s_v5', 'Standard_D2ds_v6'])
+      expect(lifecycleFamily(s), s).toBeUndefined();
+  });
+
+  it('does not stack lifecycle with regional uplift', () => {
+    expect(priceUplift('Standard_D2_v2', 'westeurope')).toEqual({ pct: 25, kind: 'lifecycle' });
+    expect(priceUplift('Standard_D2s_v5', 'westeurope')).toEqual({ pct: 9, kind: 'regional' });
+    expect(priceUplift('Standard_D2s_v5', 'swedencentral')).toEqual({ pct: 0, kind: 'none' });
+  });
+
   it('announced regional uplifts are present', () => {
     expect(REGIONAL_UPLIFT_PCT.northeurope).toBe(17);
     expect(REGIONAL_UPLIFT_PCT.francecentral).toBe(11);
