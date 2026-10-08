@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { SkuAdvisor, RetailPriceProvider, type PriceProvider, type SkuAdvice } from '../advisor/index.js';
 import { AzureCliCredentialProvider } from '../azure/credential.js';
 import { HttpArmClient, type ArmClient } from '../azure/arm.js';
 import { SkuService } from '../azure/skus.js';
@@ -17,6 +18,7 @@ export interface AppContext {
   engine: MigrationEngine;
   service: MigrationService;
   getVm(vmId: string): Promise<VmInfo>;
+  advise(vms: VmInfo[]): Promise<SkuAdvice[]>;
   discover(opts: { subscriptionIds?: string[]; retiringOnly?: boolean }): Promise<VmInfo[]>;
   preCheck(vm: VmInfo, targetSku?: string, opts?: { strategy?: MigrationStrategy }): Promise<PreCheckResult>;
 }
@@ -26,6 +28,7 @@ export interface ContextOptions {
   jobsDir?: string;
   store?: JobStore;
   concurrency?: number;
+  prices?: PriceProvider;
   /** Test hook: skip real waiting */
   fast?: boolean;
 }
@@ -52,6 +55,7 @@ export function createContext(opts: ContextOptions = {}): AppContext {
     }),
     ...(opts.fast ? { sleep: async () => undefined, pollIntervalMs: 1, provisionTimeoutMs: 50 } : {}),
   });
+  const advisor = new SkuAdvisor({ arm, skus, catalog, prices: opts.prices ?? new RetailPriceProvider() });
   const service = new MigrationService(engine, { concurrency: opts.concurrency ?? 2 });
   return {
     arm,
@@ -61,6 +65,7 @@ export function createContext(opts: ContextOptions = {}): AppContext {
     engine,
     service,
     getVm: getVmInfo,
+    advise: (vms) => advisor.advise(vms),
     discover: (o) => discoverVms(arm, skus, catalog, { ...(o.subscriptionIds?.length ? { subscriptionIds: o.subscriptionIds } : {}), ...(o.retiringOnly ? { retiringOnly: true } : {}) }),
     preCheck,
   };

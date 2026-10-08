@@ -109,6 +109,10 @@ Open <http://127.0.0.1:3000/>. If you see `401 NotLoggedIn`, run `az login` agai
      blocks (Windows temp disk, Gen1) into warnings. It is marked *Recommended* when an in-place resize is blocked.
    - **BLOCK**: cannot be done in place; tick the rebuild checkbox if offered.
 3. Optionally override the target SKU (default is the matching v7 size, with v6 as fallback).
+   Click **Auto-SKU selection** to pick the best SKU for every VM and put it first in each dropdown. The **ℹ** button
+   beside a dropdown opens a side-by-side comparison of the current and proposed SKU, with quota check, zone
+   constraints, monthly cost impact (including the announced regional price increases, e.g. North Europe +17%,
+   West Europe +9%) and reservation advice (existing reservations are looked up; if found, exchange or re-scope them).
 4. Start with **Dry run**, then run the real **Migrate**. For each VM the engine:
    re-validates, snapshots the disks, deallocates, resizes (and switches the disk controller to NVMe when needed),
    starts the VM, then runs post-checks (provisioning, power, size, agent heartbeat, extensions, disks, networking).

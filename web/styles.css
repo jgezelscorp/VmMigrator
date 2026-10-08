@@ -83,3 +83,9 @@ dialog::backdrop { background:#0f1226aa; backdrop-filter:blur(3px); }
 @keyframes float { 50% { transform:translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition:none !important; } }
 @media (max-width: 640px) { main { padding:8px; } .topbar { flex-wrap:wrap; } }
+
+.sku-cell{display:flex;gap:6px;align-items:center}
+.info-btn{padding:2px 8px;border-radius:50%;line-height:1}
+#sku-info{max-width:720px;width:90%}
+#sku-info table.cmp{width:100%;border-collapse:collapse}
+#sku-info table.cmp th,#sku-info table.cmp td{padding:4px 8px;border-bottom:1px solid #8884;text-align:left}
