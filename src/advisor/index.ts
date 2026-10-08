@@ -143,7 +143,8 @@ export interface SkuAdvice {
     proposedUpliftPct: number;
     currentUpliftKind: UpliftKind;
     proposedUpliftKind: UpliftKind;
-    currentMonthlyWithUplift?: number;
+    currentRegionalImpact?: string;
+    proposedRegionalImpact?: string;
     proposedMonthlyWithUplift?: number;
     deltaPctWithUplift?: number;
     message: string;
@@ -367,7 +368,21 @@ export class SkuAdvisor {
               ? `${size}: excluded from the ${vm.location} regional increase (${regionalExcludedFamily(size)})`
               : `${size}: no announced increase`;
       const upliftNote = `Effective 1 Feb 2027 - ${describe(from, cu)}; ${describe(to, pu)}.`;
-      const common = { currentUpliftPct: cu.pct, proposedUpliftPct: pu.pct, currentUpliftKind: cu.kind, proposedUpliftKind: pu.kind };
+      const regional = (size: string, u: { pct: number; kind: UpliftKind }): string => {
+        const r = REGIONAL_UPLIFT_PCT[vm.location.toLowerCase()];
+        if (!r) return `No - ${vm.location} has no regional increase`;
+        if (u.kind === 'regional') return `Yes - +${u.pct}% (${vm.location})`;
+        if (u.kind === 'lifecycle') return `No - lifecycle +${u.pct}% applies instead (not stacked)`;
+        return `No - excluded (${regionalExcludedFamily(size) ?? 'family'})`;
+      };
+      const common = {
+        currentUpliftPct: cu.pct,
+        proposedUpliftPct: pu.pct,
+        currentUpliftKind: cu.kind,
+        proposedUpliftKind: pu.kind,
+        currentRegionalImpact: regional(from, cu),
+        proposedRegionalImpact: regional(to, pu),
+      };
       if (cur === undefined || next === undefined) {
         return {
           status: 'unavailable',
