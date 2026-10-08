@@ -84,7 +84,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     const opts = [...new Set([...(adv ? [adv] : []), current, ...SKU_CHOICES])];
     const sel = h('select', {
       'aria-label': `Target SKU for ${vm.name}`,
-      onchange: (e) => { state.targets[vm.id] = e.target.value; delete state.prechecks[vm.id]; state.rebuild.delete(vm.id); updateButtons(); },
+      onchange: (e) => { state.targets[vm.id] = e.target.value; delete state.prechecks[vm.id]; state.rebuild.delete(vm.id); renderPrecheck(); updateButtons(); },
     }, opts.map((s) => h('option', { value: s, selected: s === current }, s)));
     const info = h('button', {
       type: 'button', class: 'info-btn', title: 'Compare with proposed SKU', 'aria-label': `SKU details for ${vm.name}`,
@@ -154,12 +154,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
           state.advice[a.vmId] = a;
           if (a.proposed) { state.targets[a.vmId] = a.proposed.name; delete state.prechecks[a.vmId]; state.rebuild.delete(a.vmId); }
         }
-        renderTable();
-      } catch (e) { showError(e); }
-    });
-  }
-
-  function renderTable() {
+        renderTable(); renderPrecheck();
     const rows = filtered();
     $('count').textContent = `${rows.length} of ${state.vms.length} VMs, ${state.selected.size} selected`;
     $('vm-table').querySelector('tbody').replaceChildren(...rows.map((vm) => h('tr', {},
@@ -211,6 +206,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
 
   async function runPrecheck() {
     showError(null);
+    $('precheck').replaceChildren();
     await busy([$('btn-precheck')], $('pre-bar'), async () => {
       try {
         const ids = [...state.selected];
@@ -221,7 +217,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
           for (const r of await client.precheck(group, o, strategy)) { state.prechecks[r.vmId] = r; state.targets[r.vmId] = r.targetSku; }
         }
         renderPrecheck(); renderTable();
-      } catch (e) { showError(e); }
+        $('precheck').scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
     });
   }
 
