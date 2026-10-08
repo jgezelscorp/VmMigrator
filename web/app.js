@@ -84,11 +84,11 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     const opts = [...new Set([...(adv ? [adv] : []), current, ...SKU_CHOICES])];
     const sel = h('select', {
       'aria-label': `Target SKU for ${vm.name}`,
-      onchange: (e) => { state.targets[vm.id] = e.target.value; delete state.prechecks[vm.id]; state.rebuild.delete(vm.id); renderPrecheck(); updateButtons(); },
+      onchange: (e) => { state.targets[vm.id] = e.target.value; e.target.parentNode.querySelector('.info-btn').disabled = e.target.value !== state.advice[vm.id]?.proposed?.name; delete state.prechecks[vm.id]; state.rebuild.delete(vm.id); renderPrecheck(); updateButtons(); },
     }, opts.map((s) => h('option', { value: s, selected: s === current }, s)));
     const info = h('button', {
       type: 'button', class: 'info-btn', title: 'Compare with proposed SKU', 'aria-label': `SKU details for ${vm.name}`,
-      disabled: !state.advice[vm.id], onclick: () => showSkuInfo(vm.id),
+      disabled: !adv || current !== adv, onclick: () => showSkuInfo(vm.id),
     }, 'ℹ');
     return h('div', { class: 'sku-cell' }, sel, info);
   }
