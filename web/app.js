@@ -102,6 +102,8 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     const c = a.cost;
     const upl = (kind, p) => (kind === 'lifecycle' ? `+${p}% lifecycle` : kind === 'regional' ? `+${p}% regional` : 'none');
     const sc = a.current, sp = a.proposed;
+    const num = (v) => (v === undefined || v === null ? 'n/a' : Number(v).toLocaleString('en-US'));
+    const net = (s) => (s ? `${num(s.networkMbps)} / ${s.maxNics ?? 'n/a'}` : '—');
     const row = (label, x, y) => h('tr', {}, h('th', {}, label), h('td', {}, x ?? '—'), h('td', {}, y ?? '—'));
     const cmp = h('table', { class: 'cmp' },
       h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Current'), h('th', {}, 'Proposed'))),
@@ -113,6 +115,14 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
         row('Generations', sc?.generations.join(', '), sp?.generations.join(', ')),
         row('Disk controller', sc?.diskControllers.join(', '), sp?.diskControllers.join(', ')),
         row('Accelerated networking', sc ? String(sc.acceleratedNetworking) : '', sp ? String(sp.acceleratedNetworking) : ''),
+        row('Focus', sc?.focus ?? 'n/a', sp?.focus ?? 'n/a'),
+        row('Max uncached disk IOPS', num(sc?.uncachedIops), num(sp?.uncachedIops)),
+        row('Max uncached throughput (MBps)', num(sc?.uncachedMBps), num(sp?.uncachedMBps)),
+        row('Burst disk IOPS', num(sc?.burstIops), num(sp?.burstIops)),
+        row('Burst throughput (MBps)', num(sc?.burstMBps), num(sp?.burstMBps)),
+        row('Cached/temp IOPS', num(sc?.cachedIops), num(sp?.cachedIops)),
+        row('Network (Mbps) / max NICs', net(sc), net(sp)),
+        row('Performance (ACU benchmark)', sc?.acu ?? 'not published', sp?.acu ?? 'not published'),
         row('Monthly (list)', money(c.currentMonthly), money(c.proposedMonthly)),
         row('Impacted by regional price uplift', c.currentRegionalImpact ?? '-', c.proposedRegionalImpact ?? '-'),
         row('Increase from 1 Feb 2027', upl(c.currentUpliftKind, c.currentUpliftPct), upl(c.proposedUpliftKind, c.proposedUpliftPct)),

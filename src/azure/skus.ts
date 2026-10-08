@@ -18,6 +18,13 @@ export interface SkuInfo {
   acceleratedNetworking: boolean;
   premiumIO: boolean;
   ephemeralOsDisk: boolean;
+  /** Published Azure Compute Units (absent for newer sizes) */
+  acu?: number;
+  uncachedIops?: number;
+  uncachedBytesPerSec?: number;
+  cachedIops?: number;
+  maxNics?: number;
+  cpuArchitecture?: string;
   /** Zones where the size is offered in the queried location */
   zones: string[];
   restrictions: SkuRestriction[];
@@ -46,6 +53,7 @@ interface RawSku {
 export function normalizeSku(raw: RawSku): SkuInfo {
   const cap = (n: string): string | undefined => raw.capabilities?.find((c) => c.name === n)?.value;
   const split = (v?: string): string[] => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []);
+  const num = (v?: string): number | undefined => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
   return {
     name: raw.name,
     family: raw.family ?? '',
@@ -59,6 +67,12 @@ export function normalizeSku(raw: RawSku): SkuInfo {
     acceleratedNetworking: cap('AcceleratedNetworkingEnabled') === 'True',
     premiumIO: cap('PremiumIO') === 'True',
     ephemeralOsDisk: cap('EphemeralOSDiskSupported') === 'True',
+    ...(num(cap('ACUs')) !== undefined ? { acu: num(cap('ACUs'))! } : {}),
+    ...(num(cap('UncachedDiskIOPS')) !== undefined ? { uncachedIops: num(cap('UncachedDiskIOPS'))! } : {}),
+    ...(num(cap('UncachedDiskBytesPerSecond')) !== undefined ? { uncachedBytesPerSec: num(cap('UncachedDiskBytesPerSecond'))! } : {}),
+    ...(num(cap('CombinedTempDiskAndCachedIOPS')) !== undefined ? { cachedIops: num(cap('CombinedTempDiskAndCachedIOPS'))! } : {}),
+    ...(num(cap('MaxNetworkInterfaces')) !== undefined ? { maxNics: num(cap('MaxNetworkInterfaces'))! } : {}),
+    ...(cap('CpuArchitectureType') ? { cpuArchitecture: cap('CpuArchitectureType')! } : {}),
     zones: raw.locationInfo?.flatMap((l) => l.zones ?? []) ?? [],
     restrictions: (raw.restrictions ?? []).map((r) => ({
       type: r.type,
