@@ -67,7 +67,7 @@ ${r.checks.map((c) => `<tr><td>${esc(c.checkId)}</td><td>${pill(c.status)}</td><
   });
   const totRow = (label, n, ok) => `<tr><td colspan="4"><b>Total (${finItems.length} VMs)</b></td><td>${label}</td>${ok ? delta(n, totals.base) : '<td>n/a</td><td>n/a</td><td>n/a</td>'}</tr>`;
   const finSection = finItems.length ? `<h2>Financial impact (Auto-SKU)</h2>
-<p><small>Baseline = current VM at its reservation rate if covered, otherwise PAYGO including the regional/lifecycle uplift. Reservation prices are retail monthly rates (Windows adds the PAYGO license) and are not affected by uplift. Green = saving, red = increase. Monthly figures; annual = ×12.</small></p>
+<p><small>Baseline = current VM at its reservation rate if covered, otherwise PAYGO including the regional/lifecycle uplift. Reservation prices are retail monthly rates (Windows adds the PAYGO license) and are not affected by uplift; existing RIs keep their price until term end, then PAYGO applies. Uplifts do not apply to Sovereign/Government clouds. Green = saving, red = increase. Monthly figures; annual = ×12.</small></p>
 <table><thead><tr><th>VM</th><th>Current SKU</th><th>Current /month</th><th>New SKU</th><th>New pricing option</th><th>New /month</th><th>Gain / loss per month</th><th>Per year</th></tr></thead><tbody>
 ${finRows.join('\n')}
 ${totRow('PAYGO', totals.paygo, true)}${totRow('1-year reservation', totals.ri1, totals.ok1)}${totRow('3-year reservation', totals.ri3, totals.ok3)}

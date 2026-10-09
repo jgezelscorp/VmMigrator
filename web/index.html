@@ -118,11 +118,12 @@
       <h2 id="pricing-info-title">How pricing is calculated</h2>
       <ol>
         <li><b>Baseline:</b> Azure Retail Prices list price (PAYGO) per hour &times; 730 h/month.</li>
-        <li><b>Lifecycle uplift:</b> VMs on a series with a non-zero % pay that % more from the effective date (default 1 Feb 2027) if they are not migrated.</li>
+        <li><b>Lifecycle uplift:</b> per Microsoft's customer communication, v1 and v2 series (Bv1, D, Ds, F, Fs, G, Gs, Ls, NP, HC, Av2, Amv2, Dv2, Dsv2, Fsv2, Lsv2) pay about 25% more on PAYGO, EA and MCA rates from 1 Feb 2027 if not migrated. v3 series are not in this increase; Dv3/Dsv3/Ev3/Esv3 retire on 15 Nov 2029.</li>
         <li><b>Regional uplift:</b> some regions carry a price increase on new SKUs. It applies to the target SKU's PAYGO price.</li>
         <li><b>No stacking:</b> if a lifecycle uplift applies, it wins; the regional % is not added on top.</li>
         <li><b>Exclusions:</b> Intel v7 families (Dsv7, Ddsv7, Dlsv7, Dldsv7, Esv7, Edsv7) are not subject to the regional uplift.</li>
-        <li><b>Reservations:</b> 1- and 3-year RI prices are not uplifted. Windows adds the PAYGO license cost.</li>
+        <li><b>Reservations:</b> existing RIs keep their price until the term ends (then PAYGO applies, even with auto-renew); new RI prices are not uplifted. Savings plans follow the updated VM rates. Windows adds the PAYGO license cost.</li>
+        <li><b>Scope:</b> the increases apply to Azure public cloud (the 25% also to China/21Vianet); Sovereign Cloud and Government are exempt. v1/v2 hosts get the lifecycle increase only (no regional uplift); v4/v5/v6 get the regional uplift only if the exact SKU is in scope, and never the 25%. The per-SKU regional scope is not yet verified &mdash; review it on the Settings page.</li>
         <li><b>Your values:</b> every percentage and date comes from this Settings page. Add a series or region and it is used in the next calculation.</li>
       </ol>
       <div class="row end"><button id="pricing-info-close" type="button" class="secondary">Close</button></div>
