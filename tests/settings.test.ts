@@ -16,7 +16,7 @@ describe('pricing settings', () => {
   it('serves defaults prepopulated from known values', async () => {
     const app = mk();
     const r = (await app.inject({ url: '/api/settings' })).json();
-    expect(r.settings.regions.find((x: any) => x.name === 'northeurope').upliftPct).toBe(REGIONAL_UPLIFT_PCT.northeurope);
+    expect(r.settings.regions.find((x: { name: string; upliftPct: number }) => x.name === 'northeurope').upliftPct).toBe(REGIONAL_UPLIFT_PCT.northeurope);
     expect(r.settings.series.length).toBeGreaterThan(10);
     expect(r.defaults.series.length).toBe(r.settings.series.length);
     await app.close();
@@ -47,9 +47,9 @@ describe('pricing settings', () => {
     const put = await app.inject({ method: 'PUT', url: '/api/settings', payload: cur });
     expect(put.statusCode).toBe(200);
     const again = (await app.inject({ url: '/api/settings' })).json().settings;
-    expect(again.regions.some((x: any) => x.name === 'testregion' && x.upliftPct === 42)).toBe(true);
+    expect(again.regions.some((x: { name: string; upliftPct: number }) => x.name === 'testregion' && x.upliftPct === 42)).toBe(true);
     const reset = (await app.inject({ method: 'POST', url: '/api/settings/reset' })).json().settings;
-    expect(reset.regions.some((x: any) => x.name === 'testregion')).toBe(false);
+    expect(reset.regions.some((x: { name: string; upliftPct: number }) => x.name === 'testregion')).toBe(false);
     await app.close();
   });
 });

@@ -23,8 +23,6 @@ export type UpliftKind = 'lifecycle' | 'regional' | 'none';
 
 /** Runtime pricing inputs (editable on the Settings page); defaults mirror the announced values. */
 let regionalUplift: Record<string, number> = { ...REGIONAL_UPLIFT_PCT };
-let seriesUplift: Record<string, number> = {};
-const FAMILY_TO_SERIES: Record<string, string> = { D: 'Dv1', Ds: 'Dsv1', F: 'Fv1', Fs: 'Fsv1', G: 'Gv1', Gs: 'Gsv1', L: 'Ls' };
 
 /** Customer-specific discounts applied on top of retail list prices (0 = list pricing). */
 let paygoDiscountPct = 0;
@@ -39,7 +37,6 @@ export function applyPricingSettings(s: {
   paygoDiscountPct = s.customerPricing?.paygoDiscountPct ?? 0;
   reservationDiscountPct = s.customerPricing?.reservationDiscountPct ?? 0;
   regionalUplift = Object.fromEntries(s.regions.map((r) => [r.name.toLowerCase(), r.upliftPct]));
-  seriesUplift = Object.fromEntries(s.series.map((r) => [r.id, r.upliftPct]));
 }
 
 export function regionalPct(region: string): number | undefined {
