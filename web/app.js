@@ -362,7 +362,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     renderTable();
   };
   function downloadReport() {
-    const html = buildReport({ vms: state.vms, prechecks: state.prechecks, jobs: [...state.jobs.values()], targets: state.targets, subscription: subId() });
+    const html = buildReport({ vms: state.vms, prechecks: state.prechecks, jobs: [...state.jobs.values()], targets: state.targets, advice: state.advice, subscription: subId() });
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     const a = h('a', { href: url, download: `vm-migrator-report-${new Date().toISOString().slice(0, 10)}.html` });
     doc.body.append(a); a.click(); a.remove();
