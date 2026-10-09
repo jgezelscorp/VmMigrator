@@ -24,6 +24,14 @@ Source: [VM size series retirements, capacity growth restrictions, and moderniza
 - Original **Av1** (Basic_A*/Standard_A0–A11) is already retired (Aug 2024) ⚠️ (not re-confirmed on a fetched page); the tool should still flag any remaining Standard_A* that is not Av2.
 - **Capacity growth restrictions since July 2026** for F/Fs/Fsv2, D/Ds/Dv2/Dsv2/Dv3/Dsv3, B/Bs, Av2/Amv2, Ev3/Esv3, G/Gs, Ls/Lsv2: new subscriptions cannot deploy them; existing subscriptions can use only already-approved quota; no additional quota; allocation may fail even within quota. Implication: **resizing back (rollback) is not guaranteed to succeed once a VM is moved off** — snapshot + keep original VM model.
 
+### 1a. Pricing communications (customer email "CXP" and AVD pricing-impact table)
+
+- ~25% increase from 1 Feb 2027 on PAYGO/EA/MCA for v1 (Bv1, D, Ds, F, Fs, G, Gs, Ls, NP, HC) and v2 (Av2, Amv2, Dv2, Dsv2, Fsv2, Lsv2). v3 is not included.
+- Existing RIs keep their price until term end, then PAYGO applies (even with auto-renew). Savings plans follow the new VM rates.
+- Public cloud (and 21Vianet for the 25%); Sovereign Cloud and Government are exempt.
+- AVD table: v1/v2 hosts get the 25% only (no regional uplift); v4/v5/v6 get a regional uplift only when the exact SKU is in scope, never the 25%.
+- Not yet verified: the per-SKU regional scope and percentages (source documents are IRM-protected).
+
 ## 2. Recommended targets
 
 Source: same page + [Modernize to v6 and v7](https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/lifecycle/sizes-v6-v7-modernization-overview)
