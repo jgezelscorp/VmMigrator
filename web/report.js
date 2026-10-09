@@ -4,7 +4,7 @@ const pill = (s) => `<span class="pill ${esc(String(s).toLowerCase())}">${esc(s)
 const dash = (v) => (v === undefined || v === null || v === '' ? '—' : esc(v));
 const count = (arr, fn) => arr.filter(fn).length;
 
-export function buildReport({ vms = [], prechecks = {}, jobs = [], targets = {}, subscription = '', generatedAt = new Date() } = {}) {
+export function buildReport({ vms = [], prechecks = {}, jobs = [], targets = {}, subscription = '', advice = {}, generatedAt = new Date() } = {}) {
   const retiring = vms.filter((v) => v.retiringSeries);
   const bySeries = new Map();
   for (const v of retiring) bySeries.set(v.retiringSeries, (bySeries.get(v.retiringSeries) ?? 0) + 1);
@@ -41,6 +41,38 @@ ${r.checks.map((c) => `<tr><td>${esc(c.checkId)}</td><td>${pill(c.status)}</td><
 <td>${esc((j.completedSteps ?? []).join(' → '))}</td><td>${j.postCheck ? pill(j.postCheck.overall) : '—'}</td><td>${dash(j.error)}</td></tr>`;
   }).join('\n');
 
+  const usd = (n) => (n == null ? 'n/a' : `${n < 0 ? '-' : ''}$${Math.abs(n).toFixed(2)}`);
+  const finItems = vms.map((v) => {
+    const a = advice[v.id];
+    const target = prechecks[v.id]?.targetSku ?? targets[v.id];
+    if (!a?.proposed?.name || a.cost?.status !== 'ok' || target !== a.proposed.name) return null;
+    return { v, a, c: a.cost };
+  }).filter(Boolean);
+  const delta = (n, base) => (n == null || base == null ? '<td>n/a</td><td>n/a</td><td>n/a</td>'
+    : `<td>${usd(n)}</td><td class="${n - base <= 0 ? 'gain' : 'loss'}">${n - base <= 0 ? '' : '+'}${usd(n - base)} (${base ? (((n - base) / base) * 100).toFixed(1) : '0.0'}%)</td><td class="${n - base <= 0 ? 'gain' : 'loss'}">${n - base <= 0 ? '' : '+'}${usd((n - base) * 12)}</td>`);
+  const totals = { base: 0, paygo: 0, ri1: 0, ri3: 0, ok1: true, ok3: true };
+  const finRows = finItems.map(({ v, a, c }) => {
+    const covered = (a.reservation?.matches ?? []).length > 0;
+    const curRi = c.currentOneYearMonthly ?? c.currentThreeYearMonthly;
+    const base = covered && curRi != null ? curRi : c.currentMonthlyWithUplift;
+    const basis = covered && curRi != null ? 'Reservation' : 'PAYGO' + (c.currentUpliftKind && c.currentUpliftKind !== 'none' ? ` +${c.currentUpliftPct}% ${c.currentUpliftKind}` : '');
+    totals.base += base ?? 0; totals.paygo += c.proposedMonthlyWithUplift ?? 0;
+    if (c.proposedOneYearMonthly == null) totals.ok1 = false; else totals.ri1 += c.proposedOneYearMonthly;
+    if (c.proposedThreeYearMonthly == null) totals.ok3 = false; else totals.ri3 += c.proposedThreeYearMonthly;
+    const head = `<td rowspan="3"><b>${esc(v.name)}</b></td><td rowspan="3">${esc(a.current?.name ?? v.vmSize)}<br><small>${esc(basis)}</small></td><td rowspan="3">${usd(base)}</td><td rowspan="3">${esc(a.proposed.name)}</td>`;
+    const pgBasis = `PAYGO${c.proposedUpliftKind && c.proposedUpliftKind !== 'none' ? ` +${c.proposedUpliftPct}% ${c.proposedUpliftKind}` : ''}`;
+    return `<tr>${head}<td>${esc(pgBasis)}</td>${delta(c.proposedMonthlyWithUplift, base)}</tr>
+<tr><td>1-year reservation</td>${delta(c.proposedOneYearMonthly, base)}</tr>
+<tr><td>3-year reservation</td>${delta(c.proposedThreeYearMonthly, base)}</tr>`;
+  });
+  const totRow = (label, n, ok) => `<tr><td colspan="4"><b>Total (${finItems.length} VMs)</b></td><td>${label}</td>${ok ? delta(n, totals.base) : '<td>n/a</td><td>n/a</td><td>n/a</td>'}</tr>`;
+  const finSection = finItems.length ? `<h2>Financial impact (Auto-SKU)</h2>
+<p><small>Baseline = current VM at its reservation rate if covered, otherwise PAYGO including the regional/lifecycle uplift. Reservation prices are retail monthly rates (Windows adds the PAYGO license) and are not affected by uplift. Green = saving, red = increase. Monthly figures; annual = ×12.</small></p>
+<table><thead><tr><th>VM</th><th>Current SKU</th><th>Current /month</th><th>New SKU</th><th>New pricing option</th><th>New /month</th><th>Gain / loss per month</th><th>Per year</th></tr></thead><tbody>
+${finRows.join('\n')}
+${totRow('PAYGO', totals.paygo, true)}${totRow('1-year reservation', totals.ri1, totals.ok1)}${totRow('3-year reservation', totals.ri3, totals.ok3)}
+</tbody></table>` : '';
+
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>VM-Migrator estate report</title>
 <style>
@@ -55,6 +87,7 @@ th,td{border:1px solid #e0e5f2;padding:.35rem .5rem;text-align:left;vertical-ali
 .pill.pass,.pill.ok,.pill.done,.pill.running{background:#d4f4dd;color:#146c2e}
 .pill.warn,.pill.retiring,.pill.restored{background:#fff1c9;color:#8a5a00}
 .pill.block,.pill.fail,.pill.failed{background:#fdd9d9;color:#a11}
+td.gain{color:#1e8e3e;font-weight:700}td.loss{color:#c0392b;font-weight:700}
 @media print{body{margin:.5rem;background:#fff}}
 </style></head><body>
 <h1>VM-Migrator estate report</h1>
@@ -68,6 +101,7 @@ ${kpi(count(checked, (v) => prechecks[v.id].overall === 'PASS'), 'Pre-check PASS
 <table><thead><tr><th>VM</th><th>OS</th><th>Size</th><th>Series</th><th>Retires</th><th>Region</th><th>Gen</th><th>Security</th><th>Disk ctrl</th><th>Disks</th><th>Power</th><th>Target</th><th>Pre-check</th><th>Migration</th></tr></thead><tbody>
 ${vmRows || '<tr><td colspan="14">No VMs loaded.</td></tr>'}
 </tbody></table>
+${finSection}
 <h2>Pre-check details</h2>
 ${checkSections || '<p>No pre-checks have been run yet.</p>'}
 <h2>Migration jobs</h2>
