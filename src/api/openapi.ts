@@ -14,6 +14,8 @@ export const OPENAPI = {
       },
     },
     '/api/vms/precheck': { post: { summary: 'Body { vmIds[], targetOverrides?, strategy?: inPlace or rebuild } -> { results: PreCheckResult[] }' } },
+    '/api/settings': { get: { summary: '{ settings, defaults } editable pricing model: series lifecycle dates + uplift %, region uplift %' }, put: { summary: 'Body PricingSettings -> { settings } validate, persist and apply' } },
+    '/api/settings/reset': { post: { summary: 'Restore default settings -> { settings }' } },
     '/api/vms/sku-advice': { post: { summary: 'Body { vmIds[] } -> { advice: SkuAdvice[] } best target SKU per VM with quota, zone, cost (incl. 1 Feb 2027 lifecycle/regional price changes) , 1/3-year reservation monthly prices (current/proposed) and reservation analysis' } },
     '/api/migrations': {
       get: { summary: 'List jobs: { jobs }' },

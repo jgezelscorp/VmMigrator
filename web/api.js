@@ -39,6 +39,9 @@ export function createApi({ baseUrl = '', fetchImpl = (...a) => fetch(...a) } = 
     async getMigration(id) {
       return http('GET', `/api/migrations/${encodeURIComponent(id)}`);
     },
+    async getSettings() { return http('GET', '/api/settings'); },
+    async saveSettings(s) { return http('PUT', '/api/settings', s); },
+    async resetSettings() { return http('POST', '/api/settings/reset'); },
     async rollback(id) {
       return http('POST', `/api/migrations/${encodeURIComponent(id)}/rollback`);
     },

@@ -21,6 +21,20 @@ export const LIFECYCLE_UPLIFT_PCT = 25;
 
 export type UpliftKind = 'lifecycle' | 'regional' | 'none';
 
+/** Runtime pricing inputs (editable on the Settings page); defaults mirror the announced values. */
+let regionalUplift: Record<string, number> = { ...REGIONAL_UPLIFT_PCT };
+let seriesUplift: Record<string, number> = {};
+const FAMILY_TO_SERIES: Record<string, string> = { D: 'Dv1', Ds: 'Dsv1', F: 'Fv1', Fs: 'Fsv1', G: 'Gv1', Gs: 'Gsv1', L: 'Ls' };
+
+export function applyPricingSettings(s: { regions: { name: string; upliftPct: number }[]; series: { id: string; upliftPct: number }[] }): void {
+  regionalUplift = Object.fromEntries(s.regions.map((r) => [r.name.toLowerCase(), r.upliftPct]));
+  seriesUplift = Object.fromEntries(s.series.map((r) => [r.id, r.upliftPct]));
+}
+
+export function regionalPct(region: string): number | undefined {
+  return regionalUplift[region.toLowerCase()];
+}
+
 /** Older VM families covered by the lifecycle increase, or undefined for current families. */
 export function lifecycleFamily(size: string): string | undefined {
   const m = /^Standard_([A-Za-z]+?)\d+(?:-\d+)?([a-z]*)(?:_([A-Za-z0-9]+))?/i.exec(size);
@@ -54,7 +68,7 @@ export function regionalExcludedFamily(size: string): string | undefined {
 export function priceUplift(size: string, region: string): { pct: number; kind: UpliftKind } {
   if (lifecycleFamily(size)) return { pct: LIFECYCLE_UPLIFT_PCT, kind: 'lifecycle' };
   if (regionalExcludedFamily(size)) return { pct: 0, kind: 'none' };
-  const r = REGIONAL_UPLIFT_PCT[region.toLowerCase()];
+  const r = regionalPct(region);
   return r ? { pct: r, kind: 'regional' } : { pct: 0, kind: 'none' };
 }
 
@@ -452,12 +466,12 @@ export class SkuAdvisor {
           ? `${size}: VM lifecycle +${u.pct}% (global, replaces any regional increase)`
           : u.kind === 'regional'
             ? `${size}: regional +${u.pct}% (${vm.location})`
-            : regionalExcludedFamily(size) && REGIONAL_UPLIFT_PCT[vm.location.toLowerCase()]
+            : regionalExcludedFamily(size) && regionalPct(vm.location)
               ? `${size}: excluded from the ${vm.location} regional increase (${regionalExcludedFamily(size)})`
               : `${size}: no announced increase`;
       const upliftNote = `Effective 1 Feb 2027 - ${describe(from, cu)}; ${describe(to, pu)}.`;
       const regional = (size: string, u: { pct: number; kind: UpliftKind }): string => {
-        const r = REGIONAL_UPLIFT_PCT[vm.location.toLowerCase()];
+        const r = regionalPct(vm.location);
         if (!r) return `No - ${vm.location} has no regional increase`;
         if (u.kind === 'regional') return `Yes - +${u.pct}% (${vm.location})`;
         if (u.kind === 'lifecycle') return `No - lifecycle +${u.pct}% applies instead (not stacked)`;

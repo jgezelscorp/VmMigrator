@@ -8,6 +8,7 @@ import type { MigrationJob, MigrationJobOptions } from '../domain/types.js';
 import { InvalidJobStateError, JobNotFoundError, MigrationRefusedError, isTerminal } from '../migration/index.js';
 import { createContext, type AppContext, type ContextOptions } from './context.js';
 import { OPENAPI } from './openapi.js';
+import { SettingsError } from '../settings/index.js';
 
 class BadRequest extends Error {}
 
@@ -69,7 +70,7 @@ function optionsOf(body: unknown): MigrationJobOptions {
 
 function sendError(reply: FastifyReply, e: unknown): FastifyReply {
   const message = e instanceof Error ? e.message : String(e);
-  if (e instanceof BadRequest) return reply.code(400).send({ error: 'BadRequest', message });
+  if (e instanceof BadRequest || e instanceof SettingsError) return reply.code(400).send({ error: 'BadRequest', message });
   if (e instanceof JobNotFoundError) return reply.code(404).send({ error: 'NotFound', message });
   if (e instanceof MigrationRefusedError) return reply.code(409).send({ error: 'MigrationBlocked', message });
   if (e instanceof InvalidJobStateError) return reply.code(409).send({ error: 'InvalidState', message });
@@ -104,6 +105,10 @@ export function buildApp(opts: BuildOptions = {}): FastifyInstance {
 
   app.get('/api/health', async () => ({ status: 'ok' }));
   app.get('/api/openapi.json', async () => OPENAPI);
+
+  app.get('/api/settings', async () => ({ settings: ctx.settings.get(), defaults: ctx.settings.getDefaults() }));
+  app.put('/api/settings', async (req) => ({ settings: ctx.settings.set(req.body) }));
+  app.post('/api/settings/reset', async () => ({ settings: ctx.settings.reset() }));
 
   app.get('/api/subscriptions', async () => {
     const subs = await ctx.arm.list<{ subscriptionId: string; displayName?: string; state?: string }>('/subscriptions?api-version=2022-12-01');
