@@ -65,12 +65,32 @@ ${r.checks.map((c) => `<tr><td>${esc(c.checkId)}</td><td>${pill(c.status)}</td><
 <tr><td>1-year reservation</td>${delta(c.proposedOneYearMonthly, base)}</tr>
 <tr><td>3-year reservation</td>${delta(c.proposedThreeYearMonthly, base)}</tr>`;
   });
+  const nuTotals = { base: 0, paygo: 0, ri1: 0, ri3: 0, ok1: true, ok3: true };
+  const nuRows = finItems.map(({ v, a, c }) => {
+    const covered = (a.reservation?.matches ?? []).length > 0;
+    const curRi = c.currentOneYearMonthly ?? c.currentThreeYearMonthly;
+    const base = covered && curRi != null ? curRi : c.currentMonthly;
+    nuTotals.base += base ?? 0; nuTotals.paygo += c.proposedMonthly ?? 0;
+    if (c.proposedOneYearMonthly == null) nuTotals.ok1 = false; else nuTotals.ri1 += c.proposedOneYearMonthly;
+    if (c.proposedThreeYearMonthly == null) nuTotals.ok3 = false; else nuTotals.ri3 += c.proposedThreeYearMonthly;
+    const head = `<td rowspan="3"><b>${esc(v.name)}</b></td><td rowspan="3">${esc(a.current?.name ?? v.vmSize)}<br><small>${covered && curRi != null ? 'Reservation' : 'PAYGO list'}</small></td><td rowspan="3">${usd(base)}</td><td rowspan="3">${esc(a.proposed.name)}</td>`;
+    return `<tr>${head}<td>PAYGO list (no uplift)</td>${delta(c.proposedMonthly, base)}</tr>
+<tr><td>1-year reservation</td>${delta(c.proposedOneYearMonthly, base)}</tr>
+<tr><td>3-year reservation</td>${delta(c.proposedThreeYearMonthly, base)}</tr>`;
+  });
+  const nuTot = (label, n, ok) => `<tr><td colspan="4"><b>Total (${finItems.length} VMs)</b></td><td>${label}</td>${ok ? delta(n, nuTotals.base) : '<td>n/a</td><td>n/a</td><td>n/a</td>'}</tr>`;
   const totRow = (label, n, ok) => `<tr><td colspan="4"><b>Total (${finItems.length} VMs)</b></td><td>${label}</td>${ok ? delta(n, totals.base) : '<td>n/a</td><td>n/a</td><td>n/a</td>'}</tr>`;
   const finSection = finItems.length ? `<h2>Financial impact (Auto-SKU)</h2>
 <p><small>Baseline = current VM at its reservation rate if covered, otherwise PAYGO including the regional/lifecycle uplift. Reservation prices are retail monthly rates (Windows adds the PAYGO license) and are not affected by uplift; existing RIs keep their price until term end, then PAYGO applies. Uplifts do not apply to Sovereign/Government clouds. Green = saving, red = increase. Monthly figures; annual = ×12.</small></p>
 <table><thead><tr><th>VM</th><th>Current SKU</th><th>Current /month</th><th>New SKU</th><th>New pricing option</th><th>New /month</th><th>Gain / loss per month</th><th>Per year</th></tr></thead><tbody>
 ${finRows.join('\n')}
 ${totRow('PAYGO', totals.paygo, true)}${totRow('1-year reservation', totals.ri1, totals.ok1)}${totRow('3-year reservation', totals.ri3, totals.ok3)}
+</tbody></table>
+<h3>Like-for-like comparison without the price uplift</h3>
+<p><small>Same comparison using list prices only (no regional/lifecycle uplift on either SKU). This shows whether the new SKU is genuinely cheaper than today's price, rather than only cheaper than the post-uplift price.</small></p>
+<table><thead><tr><th>VM</th><th>Current SKU</th><th>Current /month</th><th>New SKU</th><th>New pricing option</th><th>New /month</th><th>Gain / loss per month</th><th>Per year</th></tr></thead><tbody>
+${nuRows.join('\n')}
+${nuTot('PAYGO list (no uplift)', nuTotals.paygo, true)}${nuTot('1-year reservation', nuTotals.ri1, nuTotals.ok1)}${nuTot('3-year reservation', nuTotals.ri3, nuTotals.ok3)}
 </tbody></table>` : '';
 
   return `<!doctype html>
