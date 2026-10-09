@@ -16,3 +16,4 @@ coverage/
 data/jobs/
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
+data/settings.json

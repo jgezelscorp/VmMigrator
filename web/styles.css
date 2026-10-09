@@ -96,3 +96,10 @@ dialog::backdrop { background:#0f1226aa; backdrop-filter:blur(3px); }
 #sku-info{max-width:820px;width:92%}
 #sku-info table.cmp{width:100%;border-collapse:collapse}
 #sku-info table.cmp th,#sku-info table.cmp td{padding:4px 8px;border-bottom:1px solid #8884;text-align:left}
+
+#settings, #pricing-info { max-width:760px; width:92vw; }
+#settings table { width:100%; border-collapse:collapse; margin:6px 0 12px; }
+#settings td, #settings th { padding:3px 6px; text-align:left; }
+#settings input { padding:4px 6px; }
+#settings input.num { width:80px; }
+#settings .scroll { max-height:34vh; overflow:auto; }

@@ -10,7 +10,8 @@
     <a class="skip" href="#main">Skip to content</a>
     <header class="topbar">
       <h1><span class="logo" aria-hidden="true">&#9889;</span> VmMigrator <small>VM lifecycle factory</small></h1>
-      <span class="auth" title="Authentication placeholder (Entra sign-in is tracked in #11)">&#9679; Signed in via Azure CLI</span>
+      <span><button id="btn-settings" type="button" class="secondary">&#9881; Settings</button>
+      <span class="auth" title="Authentication placeholder (Entra sign-in is tracked in #11)">&#9679; Signed in via Azure CLI</span></span>
     </header>
     <div id="global-bar" class="bar indeterminate global" role="progressbar" aria-label="Working" hidden><span></span></div>
 
@@ -92,6 +93,39 @@
       <h2 id="sku-info-title">SKU comparison</h2>
       <div id="sku-info-body"></div>
       <div class="row end"><button id="sku-info-close" type="button" class="secondary">Close</button></div>
+    </dialog>
+
+    <dialog id="settings" aria-labelledby="settings-title">
+      <h2 id="settings-title">Pricing settings <button id="settings-info" type="button" class="secondary" title="How the pricing model works" aria-label="How the pricing model works">&#8505;</button></h2>
+      <label>Uplift effective date <input id="settings-effective" type="date"></label>
+      <h3>Impacted SKU series</h3>
+      <table><thead><tr><th>Series</th><th>Retirement date</th><th>Price increase %</th><th></th></tr></thead><tbody id="settings-series"></tbody></table>
+      <button id="settings-add-series" type="button" class="secondary">+ Add series</button>
+      <h3>Regions</h3>
+      <table><thead><tr><th>Region</th><th>Price increase %</th><th></th></tr></thead><tbody id="settings-regions"></tbody></table>
+      <button id="settings-add-region" type="button" class="secondary">+ Add region</button>
+      <datalist id="settings-series-ids"></datalist>
+      <datalist id="settings-region-names"></datalist>
+      <p id="settings-msg" class="muted" role="status"></p>
+      <div class="row end">
+        <button id="settings-reset" type="button" class="secondary">Reset to defaults</button>
+        <button id="settings-save" type="button">Save</button>
+        <button id="settings-close" type="button" class="secondary">Close</button>
+      </div>
+    </dialog>
+
+    <dialog id="pricing-info" aria-labelledby="pricing-info-title">
+      <h2 id="pricing-info-title">How pricing is calculated</h2>
+      <ol>
+        <li><b>Baseline:</b> Azure Retail Prices list price (PAYGO) per hour &times; 730 h/month.</li>
+        <li><b>Lifecycle uplift:</b> VMs on a series with a non-zero % pay that % more from the effective date (default 1 Feb 2027) if they are not migrated.</li>
+        <li><b>Regional uplift:</b> some regions carry a price increase on new SKUs. It applies to the target SKU's PAYGO price.</li>
+        <li><b>No stacking:</b> if a lifecycle uplift applies, it wins; the regional % is not added on top.</li>
+        <li><b>Exclusions:</b> Intel v7 families (Dsv7, Ddsv7, Dlsv7, Dldsv7, Esv7, Edsv7) are not subject to the regional uplift.</li>
+        <li><b>Reservations:</b> 1- and 3-year RI prices are not uplifted. Windows adds the PAYGO license cost.</li>
+        <li><b>Your values:</b> every percentage and date comes from this Settings page. Add a series or region and it is used in the next calculation.</li>
+      </ol>
+      <div class="row end"><button id="pricing-info-close" type="button" class="secondary">Close</button></div>
     </dialog>
 
     <dialog id="confirm" aria-labelledby="confirm-title">
