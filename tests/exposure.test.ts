@@ -42,7 +42,22 @@ describe('projectCosts', () => {
     const p = projectCosts([row({ targetPaygMonthly: 90, targetUpliftPct: 0, targetRiMonthly: 60 })] as never, {}, '2027-02-01', 36, now);
     expect(p.hasRi).toBe(false);
     expect(p.options[0].key).toBe('v7ri');
-    expect(p.options[3].key).toBe('nothing');
+    expect(p.options[p.options.length - 1].key).toBe('nothing');
+  });
+  it('hides RI options when no v7 reservation price is published', () => {
+    const p = projectCosts([row({ targetPaygMonthly: 90, targetUpliftPct: 0 })] as never, {}, '2027-02-01', 36, now);
+    expect(p.options.map((o: { key: string }) => o.key)).not.toContain('v7ri');
+    expect(p.options.map((o: { key: string }) => o.key)).not.toContain('v7ri3');
+    expect(p.unavailable.length).toBe(2);
+  });
+  it('splits region exposure into lifecycle and regional', () => {
+    const x = computeExposure([
+      row({ location: 'swedencentral', rule: 'lifecycle', upliftPct: 25 }),
+      row({ vmId: 'b', location: 'swedencentral', rule: 'regional', upliftPct: 9 }),
+    ], {});
+    const r = x.byRegion[0];
+    expect(r.lifecycleHigh).toBeCloseTo(25);
+    expect(r.regionalHigh).toBeCloseTo(9);
   });
   it('ranks the 3-year RI cheapest when its price is lowest', () => {
     const p = projectCosts([row({ targetPaygMonthly: 90, targetUpliftPct: 0, targetRiMonthly: 60, targetRi3Monthly: 40 })] as never, {}, '2027-02-01', 36, now);
