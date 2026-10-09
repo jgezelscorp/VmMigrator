@@ -355,6 +355,7 @@ export interface ExposureRow {
   targetPaygMonthly?: number;
   targetUpliftPct?: number;
   targetRiMonthly?: number;
+  targetRi3Monthly?: number;
 }
 
 /** Discount percentages currently applied to list prices. */
@@ -378,7 +379,7 @@ export class SkuAdvisor {
       const riHourly = ri?.oneYear ?? ri?.threeYear;
       const covered = resv.matches.length > 0;
       const exemptFamily = regionalExcludedFamily(vm.vmSize);
-      let target: Pick<ExposureRow, 'targetSku' | 'targetPaygMonthly' | 'targetUpliftPct' | 'targetRiMonthly'> = {};
+      let target: Pick<ExposureRow, 'targetSku' | 'targetPaygMonthly' | 'targetUpliftPct' | 'targetRiMonthly' | 'targetRi3Monthly'> = {};
       if (up.kind === 'lifecycle') {
         try {
           const adv = await this.adviseOne(vm, reservations);
@@ -389,6 +390,7 @@ export class SkuAdvisor {
               targetPaygMonthly: c.proposedMonthly,
               targetUpliftPct: c.proposedUpliftPct ?? 0,
               ...(c.proposedOneYearMonthly !== undefined ? { targetRiMonthly: c.proposedOneYearMonthly } : {}),
+              ...(c.proposedThreeYearMonthly !== undefined ? { targetRi3Monthly: c.proposedThreeYearMonthly } : {}),
             };
           }
         } catch { /* target pricing is best-effort */ }

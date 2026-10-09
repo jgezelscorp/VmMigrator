@@ -42,6 +42,11 @@ describe('projectCosts', () => {
     const p = projectCosts([row({ targetPaygMonthly: 90, targetUpliftPct: 0, targetRiMonthly: 60 })] as never, {}, '2027-02-01', 36, now);
     expect(p.hasRi).toBe(false);
     expect(p.options[0].key).toBe('v7ri');
-    expect(p.options[2].key).toBe('nothing');
+    expect(p.options[3].key).toBe('nothing');
+  });
+  it('ranks the 3-year RI cheapest when its price is lowest', () => {
+    const p = projectCosts([row({ targetPaygMonthly: 90, targetUpliftPct: 0, targetRiMonthly: 60, targetRi3Monthly: 40 })] as never, {}, '2027-02-01', 36, now);
+    expect(p.options[0].key).toBe('v7ri3');
+    expect(p.options[0].total).toBeCloseTo(40 * 36);
   });
 });
