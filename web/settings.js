@@ -33,6 +33,9 @@ export function initSettings(doc, client, { onSaved } = {}) {
 
   function render() {
     $('settings-effective').value = data.settings.effectiveDate;
+    const cpr = data.settings.customerPricing ?? (data.settings.customerPricing = { paygoDiscountPct: 0, reservationDiscountPct: 0 });
+    $('settings-paygo-disc').value = String(cpr.paygoDiscountPct);
+    $('settings-ri-disc').value = String(cpr.reservationDiscountPct);
     const known = $('settings-series-ids');
     known.replaceChildren(...data.defaults.series.map((s) => h(doc, 'option', { value: s.id })));
     $('settings-region-names').replaceChildren(...REGION_HINTS.map((r) => h(doc, 'option', { value: r })));
@@ -63,6 +66,7 @@ export function initSettings(doc, client, { onSaved } = {}) {
   $('settings-save').onclick = async () => {
     if (!data) return;
     data.settings.effectiveDate = $('settings-effective').value;
+    data.settings.customerPricing = { paygoDiscountPct: Number($('settings-paygo-disc').value || 0), reservationDiscountPct: Number($('settings-ri-disc').value || 0) };
     try {
       data.settings = (await client.saveSettings(data.settings)).settings ?? data.settings;
       render(); msg('Saved. New advice and reports use these values.');

@@ -26,7 +26,18 @@ let regionalUplift: Record<string, number> = { ...REGIONAL_UPLIFT_PCT };
 let seriesUplift: Record<string, number> = {};
 const FAMILY_TO_SERIES: Record<string, string> = { D: 'Dv1', Ds: 'Dsv1', F: 'Fv1', Fs: 'Fsv1', G: 'Gv1', Gs: 'Gsv1', L: 'Ls' };
 
-export function applyPricingSettings(s: { regions: { name: string; upliftPct: number }[]; series: { id: string; upliftPct: number }[] }): void {
+/** Customer-specific discounts applied on top of retail list prices (0 = list pricing). */
+let paygoDiscountPct = 0;
+let reservationDiscountPct = 0;
+const discounted = (h: number, pct: number): number => h * (1 - pct / 100);
+
+export function applyPricingSettings(s: {
+  regions: { name: string; upliftPct: number }[];
+  series: { id: string; upliftPct: number }[];
+  customerPricing?: { paygoDiscountPct: number; reservationDiscountPct: number };
+}): void {
+  paygoDiscountPct = s.customerPricing?.paygoDiscountPct ?? 0;
+  reservationDiscountPct = s.customerPricing?.reservationDiscountPct ?? 0;
   regionalUplift = Object.fromEntries(s.regions.map((r) => [r.name.toLowerCase(), r.upliftPct]));
   seriesUplift = Object.fromEntries(s.series.map((r) => [r.id, r.upliftPct]));
 }
@@ -466,7 +477,9 @@ export class SkuAdvisor {
 
   private async cost(vm: VmInfo, from: string,   to: string): Promise<SkuAdvice['cost']> {
     const { prices } = this.deps;
-    const [cur, next] = await Promise.all([prices.hourlyPrice(vm.location, from, vm.osType), prices.hourlyPrice(vm.location, to, vm.osType)]);
+    const [listCur, listNext] = await Promise.all([prices.hourlyPrice(vm.location, from, vm.osType), prices.hourlyPrice(vm.location, to, vm.osType)]);
+    const cur = listCur === undefined ? undefined : discounted(listCur, paygoDiscountPct);
+    const next = listNext === undefined ? undefined : discounted(listNext, paygoDiscountPct);
       const cu = priceUplift(from, vm.location);
       const pu = priceUplift(to, vm.location);
       const describe = (size: string, u: { pct: number; kind: UpliftKind }): string =>
@@ -507,12 +520,18 @@ export class SkuAdvisor {
     const curU = curM * (1 + cu.pct / 100);
     const nextU = nextM * (1 + pu.pct / 100);
     const noRi: { oneYear?: number; threeYear?: number } = {};
-    const [curRi, nextRi] = prices.reservationHourly
+    const [listCurRi, listNextRi] = prices.reservationHourly
       ? await Promise.all([
           prices.reservationHourly(vm.location, from, vm.osType).catch(() => noRi),
           prices.reservationHourly(vm.location, to, vm.osType).catch(() => noRi),
         ])
       : [noRi, noRi];
+    const disc = (r: { oneYear?: number; threeYear?: number }): { oneYear?: number; threeYear?: number } => ({
+      ...(r.oneYear !== undefined ? { oneYear: discounted(r.oneYear, reservationDiscountPct) } : {}),
+      ...(r.threeYear !== undefined ? { threeYear: discounted(r.threeYear, reservationDiscountPct) } : {}),
+    });
+    const curRi = disc(listCurRi);
+    const nextRi = disc(listNextRi);
     const mo = (h: number | undefined): number | undefined => (h === undefined ? undefined : round(h * HOURS_PER_MONTH));
     const ri = {
       ...(mo(curRi.oneYear) !== undefined ? { currentOneYearMonthly: mo(curRi.oneYear) } : {}),
@@ -532,7 +551,7 @@ export class SkuAdvisor {
       currentMonthlyWithUplift: round(curU),
       proposedMonthlyWithUplift: round(nextU),
       deltaPctWithUplift: round(((nextU - curU) / curU) * 100, 1),
-      message: `Pay-as-you-go list prices (USD, ${vm.osType}, 730 h/month). ${upliftNote}`,
+      message: `Pay-as-you-go ${paygoDiscountPct || reservationDiscountPct ? `prices after customer discount (PAYGO -${paygoDiscountPct}%, reservations -${reservationDiscountPct}%)` : 'list prices'} (USD, ${vm.osType}, 730 h/month). ${upliftNote}`,
     };
   }
 
