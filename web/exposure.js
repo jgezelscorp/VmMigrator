@@ -60,7 +60,8 @@ export function projectCosts(rows, discounts = {}, effectiveDate = '2027-02-01',
     { key: 'nothing', label: 'Do nothing (keep size, RIs until expiry)', total: 0, series: [] },
     { key: 'v7payg', label: 'Migrate to v7 at RI expiry (PAYG)', total: 0, series: [] },
     { key: 'v7ri', label: 'Migrate to v7 at RI expiry + new 1-yr RI', total: 0, series: [] },
-  ];
+    { key: 'v7ri3', label: 'Migrate to v7 at RI expiry + new 3-yr RI', total: 0, series: [] },
+      ];
   const priced = rows.filter((r) => r.priced);
   const expiries = [];
   for (const r of priced) if (r.purchase === 'reserved' && r.reservationExpiry) expiries.push({ name: r.name, date: String(r.reservationExpiry).slice(0, 10) });
@@ -68,7 +69,7 @@ export function projectCosts(rows, discounts = {}, effectiveDate = '2027-02-01',
   for (let m = 0; m < months; m++) {
     const d = at(m);
     const after = d >= eff;
-    const sums = [0, 0, 0];
+    const sums = [0, 0, 0, 0];
     for (const r of priced) {
       const ri = r.purchase === 'reserved' && r.reservedMonthly !== undefined;
       const exp = r.reservationExpiry ? new Date(r.reservationExpiry) : null;
@@ -76,10 +77,11 @@ export function projectCosts(rows, discounts = {}, effectiveDate = '2027-02-01',
       const uplift = after ? 1 + (r.upliftPct ?? 0) / 100 : 1;
       const current = covered ? r.reservedMonthly : r.paygoMonthly * uplift;
       sums[0] += current;
-      if (r.targetPaygMonthly === undefined) { sums[1] += current; sums[2] += current; continue; }
+      if (r.targetPaygMonthly === undefined) { sums[1] += current; sums[2] += current; sums[3] += current; continue; }
       const tUp = after ? 1 + (r.targetUpliftPct ?? 0) / 100 : 1;
       sums[1] += covered ? r.reservedMonthly : r.targetPaygMonthly * tUp;
       sums[2] += covered ? r.reservedMonthly : (r.targetRiMonthly ?? r.targetPaygMonthly * tUp);
+      sums[3] += covered ? r.reservedMonthly : (r.targetRi3Monthly ?? r.targetRiMonthly ?? r.targetPaygMonthly * tUp);
     }
     options.forEach((o, i) => { o.series.push({ month: d.toISOString().slice(0, 7), cost: sums[i] }); o.total += sums[i]; });
   }
