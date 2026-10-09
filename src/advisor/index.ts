@@ -336,8 +336,66 @@ function evalZones(vm: VmInfo, target: SkuInfo): SkuAdvice['zones'] {
   };
 }
 
+export interface ExposureRow {
+  vmId: string;
+  name: string;
+  subscriptionId: string;
+  location: string;
+  size: string;
+  osType: 'Windows' | 'Linux';
+  /** lifecycle = older-generation repricing, regional = regional VM pricing, excluded = in a region with an increase but exempt, none = no announced increase */
+  rule: 'lifecycle' | 'regional' | 'excluded' | 'none';
+  upliftPct: number;
+  sovereign: boolean;
+  priced: boolean;
+  paygoMonthly: number;
+  reservedMonthly: number | undefined;
+  purchase: 'reserved' | 'payg' | 'unknown';
+  reservationExpiry?: string;
+  exemptFamily?: string;
+}
+
+/** Discount percentages currently applied to list prices. */
+export function customerDiscounts(): { paygoDiscountPct: number; reservationDiscountPct: number } {
+  return { paygoDiscountPct, reservationDiscountPct };
+}
+
 export class SkuAdvisor {
   constructor(private readonly deps: AdvisorDeps) {}
+
+  /** Per-VM raw inputs for the estate exposure analysis (aggregation happens in the UI). */
+  async exposure(vms: VmInfo[]): Promise<ExposureRow[]> {
+    const reservations = await this.loadReservations();
+    const out: ExposureRow[] = [];
+    for (const vm of vms) {
+      const sovereign = /^(usgov|usdod|usnat|ussec|china|germany(central|northeast))/i.test(vm.location);
+      const up = sovereign ? { pct: 0, kind: 'none' as UpliftKind } : priceUplift(vm.vmSize, vm.location);
+      const hourly = await this.deps.prices.hourlyPrice(vm.location, vm.vmSize, vm.osType).catch(() => undefined);
+      const resv = this.reservationAdvice(vm, undefined, reservations);
+      const ri = this.deps.prices.reservationHourly ? await this.deps.prices.reservationHourly(vm.location, vm.vmSize, vm.osType).catch(() => undefined) : undefined;
+      const riHourly = ri?.oneYear ?? ri?.threeYear;
+      const covered = resv.matches.length > 0;
+      const exemptFamily = regionalExcludedFamily(vm.vmSize);
+      out.push({
+        vmId: vm.id,
+        name: vm.name,
+        subscriptionId: vm.subscriptionId,
+        location: vm.location,
+        size: vm.vmSize,
+        osType: vm.osType,
+        rule: up.kind === 'none' ? (exemptFamily && regionalPct(vm.location) && !sovereign ? 'excluded' : 'none') : up.kind,
+        upliftPct: up.pct,
+        sovereign,
+        priced: hourly !== undefined,
+        paygoMonthly: hourly === undefined ? 0 : round(discounted(hourly, paygoDiscountPct) * HOURS_PER_MONTH),
+        reservedMonthly: covered && riHourly !== undefined ? round(discounted(riHourly, reservationDiscountPct) * HOURS_PER_MONTH) : undefined,
+        purchase: !reservations ? 'unknown' : covered ? 'reserved' : 'payg',
+        ...(resv.matches[0]?.expiry ? { reservationExpiry: resv.matches[0].expiry } : {}),
+        ...(exemptFamily ? { exemptFamily } : {}),
+      });
+    }
+    return out;
+  }
 
   async advise(vms: VmInfo[]): Promise<SkuAdvice[]> {
     const reservations = await this.loadReservations();

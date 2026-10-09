@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mapLimit } from '../discovery/discovery.js';
+import { customerDiscounts } from '../advisor/index.js';
 import type { MigrationJob, MigrationJobOptions } from '../domain/types.js';
 import { InvalidJobStateError, JobNotFoundError, MigrationRefusedError, isTerminal } from '../migration/index.js';
 import { createContext, type AppContext, type ContextOptions } from './context.js';
@@ -138,6 +139,12 @@ export function buildApp(opts: BuildOptions = {}): FastifyInstance {
     const ids = vmIdsOf(req.body);
     const vms = await mapLimit(ids, 3, async (id) => ctx.getVm(id));
     return { advice: await ctx.advise(vms) };
+  });
+
+  app.post('/api/exposure', async (req) => {
+    const ids = vmIdsOf(req.body);
+    const vms = await mapLimit(ids, 3, async (id) => ctx.getVm(id));
+    return { rows: await ctx.exposure(vms), discounts: customerDiscounts(), effectiveDate: ctx.settings.get().effectiveDate };
   });
 
   app.post('/api/migrations', async (req, reply) => {

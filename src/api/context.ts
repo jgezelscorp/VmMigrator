@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { SkuAdvisor, RetailPriceProvider, type PriceProvider, type SkuAdvice } from '../advisor/index.js';
+import { SkuAdvisor, RetailPriceProvider, type PriceProvider, type SkuAdvice, type ExposureRow } from '../advisor/index.js';
 import { DocsPerfProvider, type PerfProvider } from '../advisor/perf.js';
 import { AzureCliCredentialProvider } from '../azure/credential.js';
 import { HttpArmClient, type ArmClient } from '../azure/arm.js';
@@ -22,6 +22,7 @@ export interface AppContext {
   service: MigrationService;
   getVm(vmId: string): Promise<VmInfo>;
   advise(vms: VmInfo[]): Promise<SkuAdvice[]>;
+  exposure(vms: VmInfo[]): Promise<ExposureRow[]>;
   discover(opts: { subscriptionIds?: string[]; retiringOnly?: boolean }): Promise<VmInfo[]>;
   preCheck(vm: VmInfo, targetSku?: string, opts?: { strategy?: MigrationStrategy }): Promise<PreCheckResult>;
 }
@@ -76,6 +77,7 @@ export function createContext(opts: ContextOptions = {}): AppContext {
     service,
     getVm: getVmInfo,
     advise: (vms) => advisor.advise(vms),
+    exposure: (vms) => advisor.exposure(vms),
     discover: (o) => discoverVms(arm, skus, catalog, { ...(o.subscriptionIds?.length ? { subscriptionIds: o.subscriptionIds } : {}), ...(o.retiringOnly ? { retiringOnly: true } : {}) }),
     preCheck,
   };
