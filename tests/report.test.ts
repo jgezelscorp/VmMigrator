@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-// @ts-ignore
+// @ts-expect-error untyped browser module
 import { buildReport } from '../web/report.js';
 
 describe('report finance', () => {
