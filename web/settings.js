@@ -32,7 +32,7 @@ export function initSettings(doc, client, { onSaved } = {}) {
   }
 
   function render() {
-    $('settings-effective').value = data.effectiveDate;
+    $('settings-effective').value = data.settings.effectiveDate;
     const known = $('settings-series-ids');
     known.replaceChildren(...data.defaults.series.map((s) => h(doc, 'option', { value: s.id })));
     $('settings-region-names').replaceChildren(...REGION_HINTS.map((r) => h(doc, 'option', { value: r })));
