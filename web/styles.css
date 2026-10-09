@@ -121,3 +121,5 @@ i.payg { background: #d83b01; }
 i.ri { background: #107c10; }
 .exp-rules { display: flex; gap: .75rem; flex-wrap: wrap; }
 .exp-rule { flex: 1 1 250px; border: 1px solid #ccc; border-radius: 6px; padding: .5rem; }
+
+.exp-tl-row{display:flex;align-items:center;gap:8px;margin:4px 0}.exp-tl{flex:1;display:flex;align-items:flex-end;gap:1px;height:48px}.exp-tl i{flex:1;background:#4f8cc9;min-height:2px}.exp-tl i.mark-ri{background:#e6a100}.exp-tl i.mark-eff{background:#d13438}.mark-eff-key,.mark-ri-key{display:inline-block;width:10px;height:10px}.mark-eff-key{background:#d13438}.mark-ri-key{background:#e6a100}
