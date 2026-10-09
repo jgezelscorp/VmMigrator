@@ -50,6 +50,70 @@ export function computeExposure(rows, discounts = {}) {
   return { total, bySku: sorted(bySku), byRegion: sorted(byRegion), bySub: sorted(bySub), byGroup: sorted(byGroup), reservedRows, unpriced };
 }
 
+// 36-month cost projection per strategy. RIs keep their price until expiry, then fall to PAYG (with uplift
+// from the effective date). Retiring VMs without an RI are priced from Azure PAYG.
+export function projectCosts(rows, discounts = {}, effectiveDate = '2027-02-01', months = 36, now = new Date()) {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const eff = new Date(effectiveDate);
+  const at = (m) => new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + m, 1));
+  const options = [
+    { key: 'nothing', label: 'Do nothing (keep size, RIs until expiry)', total: 0, series: [] },
+    { key: 'v7payg', label: 'Migrate to v7 at RI expiry (PAYG)', total: 0, series: [] },
+    { key: 'v7ri', label: 'Migrate to v7 at RI expiry + new 1-yr RI', total: 0, series: [] },
+  ];
+  const priced = rows.filter((r) => r.priced);
+  const expiries = [];
+  for (const r of priced) if (r.purchase === 'reserved' && r.reservationExpiry) expiries.push({ name: r.name, date: String(r.reservationExpiry).slice(0, 10) });
+  expiries.sort((a, b) => a.date.localeCompare(b.date));
+  for (let m = 0; m < months; m++) {
+    const d = at(m);
+    const after = d >= eff;
+    const sums = [0, 0, 0];
+    for (const r of priced) {
+      const ri = r.purchase === 'reserved' && r.reservedMonthly !== undefined;
+      const exp = r.reservationExpiry ? new Date(r.reservationExpiry) : null;
+      const covered = ri && (!exp || d < exp);
+      const uplift = after ? 1 + (r.upliftPct ?? 0) / 100 : 1;
+      const current = covered ? r.reservedMonthly : r.paygoMonthly * uplift;
+      sums[0] += current;
+      if (r.targetPaygMonthly === undefined) { sums[1] += current; sums[2] += current; continue; }
+      const tUp = after ? 1 + (r.targetUpliftPct ?? 0) / 100 : 1;
+      sums[1] += covered ? r.reservedMonthly : r.targetPaygMonthly * tUp;
+      sums[2] += covered ? r.reservedMonthly : (r.targetRiMonthly ?? r.targetPaygMonthly * tUp);
+    }
+    options.forEach((o, i) => { o.series.push({ month: d.toISOString().slice(0, 7), cost: sums[i] }); o.total += sums[i]; });
+  }
+  options.sort((a, b) => a.total - b.total);
+  return { options, expiries, effectiveMonth: eff.toISOString().slice(0, 7), months, hasRi: expiries.length > 0 };
+}
+
+function costChart(doc, proj) {
+  const max = Math.max(1, ...proj.options.map((o) => o.total));
+  const best = proj.options[0];
+  const worst = proj.options[proj.options.length - 1];
+  const nothing = proj.options.find((o) => o.key === 'nothing');
+  const title = best.key === 'nothing' ? 'Doing nothing is the cheapest option over 36 months'
+    : `Best option saves ${money(nothing.total - best.total)} vs doing nothing over ${proj.months} months`;
+  const monthMax = Math.max(1, ...proj.options.flatMap((o) => o.series.map((s) => s.cost)));
+  const expMonths = new Set(proj.expiries.map((e) => e.date.slice(0, 7)));
+  const line = (o) => h(doc, 'div', { class: 'exp-tl-row' }, h(doc, 'span', { class: 'exp-label', title: o.label }, o.label),
+    h(doc, 'span', { class: 'exp-tl' }, o.series.map((s) => h(doc, 'i', {
+      class: `${expMonths.has(s.month) ? 'mark-ri ' : ''}${s.month === proj.effectiveMonth ? 'mark-eff' : ''}`.trim(),
+      style: `height:${Math.max(2, (s.cost / monthMax) * 100)}%`, title: `${s.month}: ${money(s.cost)}`,
+    }))));
+  return h(doc, 'section', { class: 'exp-chart' },
+    h(doc, 'h4', {}, `${proj.months}-month total cost by option`), h(doc, 'p', { class: 'muted' }, title),
+    proj.options.map((o) => h(doc, 'div', { class: 'exp-bar-row' }, h(doc, 'span', { class: 'exp-label', title: o.label }, o.label),
+      h(doc, 'span', { class: 'exp-bar' }, h(doc, 'i', { class: o === worst ? 'payg' : 'ri', style: `width:${(o.total / max) * 100}%` })),
+      h(doc, 'span', { class: 'num' }, money(o.total)))),
+    h(doc, 'h4', {}, 'Monthly cost over time'),
+    h(doc, 'div', { class: 'exp-legend muted' }, h(doc, 'i', { class: 'mark-eff-key' }), ' Uplift effective ', h(doc, 'i', { class: 'mark-ri-key' }), ' RI expiry month'),
+    proj.options.map(line),
+    h(doc, 'h4', {}, 'RI expiry timeline'),
+    proj.hasRi ? h(doc, 'ul', {}, proj.expiries.map((e) => h(doc, 'li', {}, `${e.date}: ${e.name}`)))
+      : h(doc, 'p', { class: 'muted' }, 'No reservations detected – Azure PAYG prices are used.'));
+}
+
 const money = (n) => `$${Math.round(n).toLocaleString('en-US')}`;
 const pct = (n, d) => (d > 0 ? `${((n / d) * 100).toFixed(1)}%` : '0%');
 
@@ -82,6 +146,7 @@ export function renderExposure(doc, root, data) {
       h(doc, 'tbody', {}, x.byGroup.map((g) => { const [loc, rl] = g.key.split('|'); return h(doc, 'tr', {}, h(doc, 'td', {}, loc), h(doc, 'td', {}, rl), h(doc, 'td', { class: 'num' }, g.count), h(doc, 'td', { class: 'num' }, money(g.base)), h(doc, 'td', { class: 'num' }, `${money(g.low)} – ${money(g.high)}`)); }))),
     h(doc, 'div', { class: 'exp-legend muted' }, h(doc, 'i', { class: 'payg' }), ' Pay-as-you-go (exposed) ', h(doc, 'i', { class: 'ri' }), ' Reserved (protected until expiry)'),
     bars(doc, 'Older-generation repricing by SKU', x.bySku), bars(doc, 'Regional pricing by region', x.byRegion), bars(doc, 'Combined exposure by subscription', x.bySub),
+    costChart(doc, projectCosts(rows, discounts, effectiveDate)),
     h(doc, 'h4', {}, 'Rules applied'),
     h(doc, 'div', { class: 'exp-rules' },
       rule('v1–v3 VM repricing (~25%)', `All public regions, effective ${effectiveDate}. Lifecycle wins over regional – no stacking.`),

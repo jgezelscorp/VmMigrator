@@ -353,6 +353,11 @@ export interface ExposureRow {
   purchase: 'reserved' | 'payg' | 'unknown';
   reservationExpiry?: string;
   exemptFamily?: string;
+  /** Proposed v7 target (retiring VMs only) used for the 36-month projection. */
+  targetSku?: string;
+  targetPaygMonthly?: number;
+  targetUpliftPct?: number;
+  targetRiMonthly?: number;
 }
 
 /** Discount percentages currently applied to list prices. */
@@ -376,7 +381,23 @@ export class SkuAdvisor {
       const riHourly = ri?.oneYear ?? ri?.threeYear;
       const covered = resv.matches.length > 0;
       const exemptFamily = regionalExcludedFamily(vm.vmSize);
+      let target: Pick<ExposureRow, 'targetSku' | 'targetPaygMonthly' | 'targetUpliftPct' | 'targetRiMonthly'> = {};
+      if (up.kind === 'lifecycle') {
+        try {
+          const adv = await this.adviseOne(vm, reservations);
+          const c = adv.cost;
+          if (adv.proposed && c?.proposedMonthly !== undefined) {
+            target = {
+              targetSku: adv.proposed.name,
+              targetPaygMonthly: c.proposedMonthly,
+              targetUpliftPct: c.proposedUpliftPct ?? 0,
+              ...(c.proposedOneYearMonthly !== undefined ? { targetRiMonthly: c.proposedOneYearMonthly } : {}),
+            };
+          }
+        } catch { /* target pricing is best-effort */ }
+      }
       out.push({
+        ...target,
         vmId: vm.id,
         name: vm.name,
         subscriptionId: vm.subscriptionId,
