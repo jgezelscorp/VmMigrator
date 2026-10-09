@@ -402,6 +402,11 @@ export class SkuAdvisor {
     if (!names.length) notes.push('No migration targets are defined for this size (it is not in a retiring series).');
     else if (!chosen) notes.push(`None of the candidate targets (${names.slice(0, 8).join(', ')}) exist in ${vm.location} for this subscription.`);
     if (bumped && chosen) notes.push('No 1-vCPU size exists in the v6/v7 series; proposing the 2-vCPU equivalent.');
+    if (chosen && regionalPct(vm.location)) {
+      const fam = regionalExcludedFamily(chosen.sku.name);
+      if (fam) notes.push(`${chosen.sku.name} (${fam}) is not impacted by the ${vm.location} regional price increase.`);
+      else notes.push(`No v7 size exempt from the ${vm.location} regional price increase was available for this VM; ${chosen.sku.name} carries the regional increase.`);
+    }
     if (chosen?.compatNote) notes.push(chosen.compatNote);
     if (chosen && !clean(chosen)) notes.push('No candidate passed every check; the best-effort proposal has open issues.');
 
@@ -445,8 +450,11 @@ export class SkuAdvisor {
     const top = Math.max(...pool.map(gen));
     const tier = pool.filter((e) => gen(e) === top);
     if (tier.length < 2) return tier[0];
+    // In a region with a regional increase, prefer v7 families that are exempt from it.
+    const exempt = regionalPct(vm.location) ? tier.filter((e) => regionalExcludedFamily(e.sku.name)) : [];
+    const candidates = exempt.length ? exempt : tier;
     const priced = await Promise.all(
-      tier.map(async (e) => {
+      candidates.map(async (e) => {
         const hourly = await this.deps.prices.hourlyPrice(vm.location, e.sku.name, vm.osType).catch(() => undefined);
         return { e, price: hourly === undefined ? Infinity : hourly * (1 + priceUplift(e.sku.name, vm.location).pct / 100) };
       }),
