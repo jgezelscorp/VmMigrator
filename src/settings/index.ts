@@ -18,6 +18,8 @@ export interface PricingSettings {
   effectiveDate: string;
   series: SeriesSetting[];
   regions: RegionSetting[];
+  /** Customer-specific discount vs. retail list price (0 = list pricing). Optional in stored files. */
+  customerPricing: { paygoDiscountPct: number; reservationDiscountPct: number };
 }
 
 /** Series that receive the global lifecycle increase by default. */
@@ -33,6 +35,7 @@ export function defaultSettings(catalog: Catalog): PricingSettings {
       upliftPct: LIFECYCLE_SERIES.has(s.id) ? LIFECYCLE_UPLIFT_PCT : 0,
     })),
     regions: Object.entries(REGIONAL_UPLIFT_PCT).map(([name, upliftPct]) => ({ name, upliftPct })),
+    customerPricing: { paygoDiscountPct: 0, reservationDiscountPct: 0 },
   };
 }
 
@@ -67,7 +70,14 @@ export function validateSettings(input: unknown): PricingSettings {
     seenR.add(name);
     return { name, upliftPct: pct(r.upliftPct, `region ${name} uplift`) };
   });
-  return { version: 1, effectiveDate, series, regions };
+  const cp = (o as { customerPricing?: Partial<PricingSettings['customerPricing']> }).customerPricing ?? {};
+  const disc = (v: unknown, what: string): number => {
+    const n = v ?? 0;
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 100) throw new SettingsError(`${what} must be a number between 0 and 100`);
+    return n;
+  };
+  const customerPricing = { paygoDiscountPct: disc(cp.paygoDiscountPct, 'PAYGO discount'), reservationDiscountPct: disc(cp.reservationDiscountPct, 'reservation discount') };
+  return { version: 1, effectiveDate, series, regions, customerPricing };
 }
 
 /** File-backed settings that feed the catalog (retirement dates) and the advisor (uplift percentages). */

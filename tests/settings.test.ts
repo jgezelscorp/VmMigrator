@@ -29,6 +29,17 @@ describe('pricing settings', () => {
     await app.close();
   });
 
+  it('stores customer discounts and rejects invalid ones', async () => {
+    const app = mk();
+    const cur = (await app.inject({ url: '/api/settings' })).json().settings;
+    expect(cur.customerPricing).toEqual({ paygoDiscountPct: 0, reservationDiscountPct: 0 });
+    const bad = await app.inject({ method: 'PUT', url: '/api/settings', payload: { ...cur, customerPricing: { paygoDiscountPct: 120, reservationDiscountPct: 0 } } });
+    expect(bad.statusCode).toBe(400);
+    const ok = await app.inject({ method: 'PUT', url: '/api/settings', payload: { ...cur, customerPricing: { paygoDiscountPct: 15, reservationDiscountPct: 5 } } });
+    expect(ok.json().settings.customerPricing).toEqual({ paygoDiscountPct: 15, reservationDiscountPct: 5 });
+    await app.close();
+  });
+
   it('saves, persists in memory and resets', async () => {
     const app = mk();
     const cur = (await app.inject({ url: '/api/settings' })).json().settings;

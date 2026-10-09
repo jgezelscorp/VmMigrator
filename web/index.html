@@ -104,6 +104,10 @@
       <h3>Regions</h3>
       <table><thead><tr><th>Region</th><th>Price increase %</th><th></th></tr></thead><tbody id="settings-regions"></tbody></table>
       <button id="settings-add-region" type="button" class="secondary">+ Add region</button>
+      <h3>Customer pricing</h3>
+      <p class="muted">Retail list prices are used by default. Enter the customer's discount (EA/MCA/CSP) to compare against negotiated prices. Derive it from the customer's Cost Management price sheet vs. the retail price. Uplifts are applied on top of the discounted price.</p>
+      <label>PAYGO discount % <input id="settings-paygo-disc" type="number" min="0" max="100" step="0.1" class="num"></label>
+      <label>Reservation discount % <input id="settings-ri-disc" type="number" min="0" max="100" step="0.1" class="num"></label>
       <datalist id="settings-series-ids"></datalist>
       <datalist id="settings-region-names"></datalist>
       <p id="settings-msg" class="muted" role="status"></p>
@@ -124,6 +128,7 @@
         <li><b>Exclusions:</b> Intel v7 families (Dsv7, Ddsv7, Dlsv7, Dldsv7, Esv7, Edsv7) are not subject to the regional uplift.</li>
         <li><b>Reservations:</b> existing RIs keep their price until the term ends (then PAYGO applies, even with auto-renew); new RI prices are not uplifted. Savings plans follow the updated VM rates. Windows adds the PAYGO license cost.</li>
         <li><b>Scope:</b> the increases apply to Azure public cloud (the 25% also to China/21Vianet); Sovereign Cloud and Government are exempt. v1/v2 hosts get the lifecycle increase only (no regional uplift); v4/v5/v6 get the regional uplift only if the exact SKU is in scope, and never the 25%. The per-SKU regional scope is not yet verified &mdash; review it on the Settings page.</li>
+        <li><b>Customer pricing:</b> optional PAYGO and reservation discount % (Settings) are subtracted from the list price before uplifts, so the report reflects negotiated rates. 0% = retail list price.</li>
         <li><b>Your values:</b> every percentage and date comes from this Settings page. Add a series or region and it is used in the next calculation.</li>
       </ol>
       <div class="row end"><button id="pricing-info-close" type="button" class="secondary">Close</button></div>
