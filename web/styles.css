@@ -103,3 +103,21 @@ dialog::backdrop { background:#0f1226aa; backdrop-filter:blur(3px); }
 #settings input { padding:4px 6px; }
 #settings input.num { width:80px; }
 #settings .scroll { max-height:34vh; overflow:auto; }
+
+dialog.wide { max-width: 1000px; width: 92vw; max-height: 90vh; overflow: auto; }
+.exp-banner { background: #fff4ce; border: 1px solid #e0b400; padding: .5rem; border-radius: 4px; }
+.exp-kpis { display: flex; gap: 1rem; flex-wrap: wrap; margin: .75rem 0; }
+.exp-kpi { flex: 1 1 200px; border: 1px solid #ccc; border-radius: 6px; padding: .5rem .75rem; }
+.exp-kpi-v { font-size: 1.3rem; font-weight: 600; }
+.exp-table { width: 100%; border-collapse: collapse; }
+.exp-table th, .exp-table td { border-bottom: 1px solid #ddd; padding: 2px 6px; text-align: left; }
+.exp-table td.num { text-align: right; }
+.exp-bar-row { display: flex; align-items: center; gap: .5rem; margin: 2px 0; }
+.exp-label { width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-bar { flex: 1; display: flex; height: 12px; background: #f0f0f0; }
+.exp-bar i, .exp-legend i { display: inline-block; height: 100%; }
+.exp-legend i { width: 12px; height: 12px; }
+i.payg { background: #d83b01; }
+i.ri { background: #107c10; }
+.exp-rules { display: flex; gap: .75rem; flex-wrap: wrap; }
+.exp-rule { flex: 1 1 250px; border: 1px solid #ccc; border-radius: 6px; padding: .5rem; }

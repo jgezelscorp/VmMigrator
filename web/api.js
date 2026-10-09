@@ -32,6 +32,9 @@ export function createApi({ baseUrl = '', fetchImpl = (...a) => fetch(...a) } = 
     async skuAdvice(vmIds) {
       return list(await http('POST', '/api/vms/sku-advice', { vmIds }), 'advice');
     },
+    async exposure(vmIds) {
+      return http('POST', '/api/exposure', { vmIds });
+    },
     async startMigration({ vmIds, dryRun, targetOverrides = {}, options }) {
       const res = await http('POST', '/api/migrations', { vmIds, dryRun, targetOverrides, ...(options ? { options } : {}) });
       return Array.isArray(res) ? res : res.jobs ?? [res];

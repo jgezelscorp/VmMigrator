@@ -1,6 +1,7 @@
 import { createApi } from './api.js';
 import { buildReport } from './report.js';
 import { initSettings } from './settings.js';
+import { initExposure } from './exposure.js';
 
 const SKU_CHOICES = [
   'Standard_D2s_v6', 'Standard_D4s_v6', 'Standard_D2s_v5', 'Standard_D4s_v5', 'Standard_D2s_v7', 'Standard_D4s_v7',
@@ -370,6 +371,7 @@ export function init(doc, { pollMs = POLL_MS, api } = {}) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   initSettings(doc, client, { onSaved: () => { state.advice = {}; } });
+  initExposure(doc, client, () => state.vms);
   $('btn-report').onclick = downloadReport;
   $('btn-auto-sku').onclick = autoSku;
   $('sku-info-close').onclick = () => { const d = $('sku-info'); if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); };

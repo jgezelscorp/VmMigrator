@@ -36,6 +36,7 @@
           <button id="btn-all" type="button" class="secondary">Show all VMs</button>
 <button id="btn-auto-sku" type="button" disabled>Auto-SKU Selection</button>
 <button id="btn-report" type="button" class="secondary" disabled>Download HTML report</button>
+<button id="btn-exposure" type="button" class="secondary">&#129514; Exposure analysis (experimental)</button>
         </div>
         <div class="row">
           <label for="filter">Search</label>
@@ -134,6 +135,11 @@
       <div class="row end"><button id="pricing-info-close" type="button" class="secondary">Close</button></div>
     </dialog>
 
+    <dialog id="exposure" class="wide" aria-labelledby="exposure-title">
+      <h3 id="exposure-title">Lifecycle &amp; regional price exposure <span class="muted">(experimental)</span></h3>
+      <div id="exposure-body"></div>
+      <div class="row"><button id="exposure-close" type="button" class="secondary">Close</button></div>
+    </dialog>
     <dialog id="confirm" aria-labelledby="confirm-title">
       <form method="dialog">
         <h2 id="confirm-title">Confirm migration</h2>
