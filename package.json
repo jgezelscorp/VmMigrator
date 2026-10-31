@@ -16,7 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@azure/identity": "^4.5.0",
+    "@azure/identity": "^4.14.1",
     "@fastify/static": "^10.1.5",
     "fastify": "^5.2.0"
   },
