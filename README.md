@@ -55,9 +55,15 @@ npm run lint; npm run typecheck; npm test; npm run build
 | [docs/demo.md](docs/demo.md) | Demo fleet |
 | [docs/entra-roadmap.md](docs/entra-roadmap.md) | Phase 2: Entra ID sign-in |
 
-## Status
+## Remark
 
-Phase 1 is implemented and validated live on the demo fleet (originally 8 VMs, see the test report). Owner: Jan G. An AI squad is configured in `.squad/` (see `.squad/team.md`).
+The code has no affiliation with Microsoft. Although I tested it with several OS'es and different versions of machines, you use it at your own risk.
+To test-drive, there is a script that deploys several machines for you to test with. 
+
+If you migrate a machine, make sure that you have a backup or an accessible snapshot you can use to move back if things go bad.
+
+If you would like to add features, feel free to fork the repo. I recommend you to install SQUAD from Brady Gaster and hook it up with Github Copilot Cli so you can analyze it and make adjustments and add features.
+
 
 ## Settings
 
